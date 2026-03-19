@@ -303,6 +303,68 @@ This time I mean it."""
         except Exception as e:
             self.log_test("PDF Export", False, f"Exception: {str(e)}")
 
+    def test_tts_status(self):
+        """Test GET /api/tts/status - should return {available: false} since no API key"""
+        try:
+            response = self.session.get(f"{self.base_url}/tts/status", timeout=10)
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                available = data.get("available")
+                # Since ELEVENLABS_API_KEY is empty, should be False
+                if available is False:
+                    self.log_test("TTS Status", True, f"Available: {available} (correct - no API key)")
+                else:
+                    self.log_test("TTS Status", False, f"Expected available=false, got {available}")
+            else:
+                self.log_test("TTS Status", False, f"Status: {response.status_code}, Response: {response.text}")
+                
+        except Exception as e:
+            self.log_test("TTS Status", False, f"Exception: {str(e)}")
+
+    def test_tts_voices(self):
+        """Test GET /api/tts/voices - should return {voices: [], available: false}"""
+        try:
+            response = self.session.get(f"{self.base_url}/tts/voices", timeout=10)
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                voices = data.get("voices", [])
+                available = data.get("available")
+                
+                # Since no API key, should have empty voices and available=false
+                if isinstance(voices, list) and len(voices) == 0 and available is False:
+                    self.log_test("TTS Voices", True, f"Voices: {len(voices)}, Available: {available} (correct)")
+                else:
+                    self.log_test("TTS Voices", False, f"Expected empty voices and available=false, got voices={len(voices)}, available={available}")
+            else:
+                self.log_test("TTS Voices", False, f"Status: {response.status_code}, Response: {response.text}")
+                
+        except Exception as e:
+            self.log_test("TTS Voices", False, f"Exception: {str(e)}")
+
+    def test_tts_generate(self):
+        """Test POST /api/tts/generate - should return 503 when no API key"""
+        try:
+            payload = {"text": "Hello, this is a test line."}
+            response = self.session.post(f"{self.base_url}/tts/generate", json=payload, timeout=15)
+            
+            # Should return 503 Service Unavailable since no API key
+            if response.status_code == 503:
+                data = response.json() if response.content else {}
+                detail = data.get("detail", "")
+                if "ElevenLabs API key" in detail:
+                    self.log_test("TTS Generate", True, f"Status: 503, Expected error: {detail}")
+                else:
+                    self.log_test("TTS Generate", False, f"Status: 503 but unexpected error message: {detail}")
+            else:
+                self.log_test("TTS Generate", False, f"Expected 503, got {response.status_code}: {response.text}")
+                
+        except Exception as e:
+            self.log_test("TTS Generate", False, f"Exception: {str(e)}")
+
     def run_all_tests(self):
         """Run complete test suite"""
         print("🎭 Starting Actor's Companion Backend API Tests")
@@ -311,6 +373,12 @@ This time I mean it."""
         
         # Test health check first
         self.test_health_check()
+        
+        # Test NEW TTS endpoints (key feature to verify)
+        print("\n🔊 Testing NEW TTS Endpoints...")
+        self.test_tts_status()
+        self.test_tts_voices()
+        self.test_tts_generate()
         
         # Test text analysis and use the breakdown for dependent tests
         text_breakdown = self.test_text_analysis()

@@ -10,9 +10,10 @@ import json
 import io
 import re
 import uuid
+import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 from datetime import datetime, timezone
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
 
@@ -28,6 +29,19 @@ api_router = APIRouter(prefix="/api")
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+# --- ElevenLabs TTS Setup ---
+eleven_client = None
+try:
+    from elevenlabs import ElevenLabs, VoiceSettings
+    elevenlabs_key = os.environ.get('ELEVENLABS_API_KEY')
+    if elevenlabs_key:
+        eleven_client = ElevenLabs(api_key=elevenlabs_key)
+        logger.info("ElevenLabs TTS initialized")
+    else:
+        logger.info("ElevenLabs API key not set - TTS disabled")
+except ImportError:
+    logger.info("ElevenLabs SDK not installed - TTS disabled")
 
 # --- Models ---
 class AnalyzeTextRequest(BaseModel):
@@ -75,6 +89,10 @@ class BreakdownResponse(BaseModel):
     self_tape_tips: SelfTapeTips
     original_text: str
     created_at: str
+
+class TTSRequest(BaseModel):
+    text: str
+    voice_id: Optional[str] = None
 
 # --- Prompts ---
 ANALYSIS_SYSTEM_PROMPT = """You are a top-tier acting coach and script analyst. Your job is to give actors an IMMEDIATELY PLAYABLE breakdown they can perform right after reading.
@@ -291,6 +309,57 @@ async def get_breakdown(breakdown_id: str):
 async def list_breakdowns():
     results = await db.breakdowns.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
     return results
+
+
+@api_router.get("/tts/status")
+async def tts_status():
+    return {"available": eleven_client is not None}
+
+
+@api_router.get("/tts/voices")
+async def list_voices():
+    if not eleven_client:
+        return {"voices": [], "available": False}
+    try:
+        def _get():
+            resp = eleven_client.voices.get_all()
+            return [{"voice_id": v.voice_id, "name": v.name, "category": getattr(v, 'category', 'unknown')} for v in resp.voices[:15]]
+        voices = await asyncio.to_thread(_get)
+        return {"voices": voices, "available": True}
+    except Exception as e:
+        logger.error(f"Error fetching voices: {e}")
+        return {"voices": [], "available": False}
+
+
+@api_router.post("/tts/generate")
+async def tts_generate(request: TTSRequest):
+    if not eleven_client:
+        raise HTTPException(status_code=503, detail="Voice features require an ElevenLabs API key. Add ELEVENLABS_API_KEY to enable.")
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Text cannot be empty")
+
+    try:
+        from elevenlabs import VoiceSettings as VS
+        voice_id = request.voice_id or "21m00Tcm4TlvDq8ikWAM"
+
+        def _generate():
+            audio_gen = eleven_client.text_to_speech.convert(
+                text=request.text,
+                voice_id=voice_id,
+                model_id="eleven_multilingual_v2",
+                voice_settings=VS(stability=0.55, similarity_boost=0.7, style=0.15, use_speaker_boost=True)
+            )
+            data = b""
+            for chunk in audio_gen:
+                data += chunk
+            return data
+
+        audio_data = await asyncio.to_thread(_generate)
+        audio_b64 = base64.b64encode(audio_data).decode()
+        return {"audio_url": f"data:audio/mpeg;base64,{audio_b64}"}
+    except Exception as e:
+        logger.error(f"TTS generation error: {e}")
+        raise HTTPException(status_code=500, detail=f"Voice generation failed: {str(e)}")
 
 
 @api_router.get("/export-pdf/{breakdown_id}")

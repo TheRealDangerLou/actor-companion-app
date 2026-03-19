@@ -28,6 +28,9 @@ import {
   Zap,
   CircleDot,
   Shuffle,
+  Share2,
+  Mic,
+  ExternalLink,
 } from "lucide-react";
 
 const container = {
@@ -58,6 +61,10 @@ export default function BreakdownView({
   onExportPdf,
   onNewAnalysis,
   onOpenMemorization,
+  onOpenSceneReader,
+  onShare,
+  ttsAvailable,
+  isShareView = false,
 }) {
   const [takesTab, setTakesTab] = useState("grounded");
 
@@ -90,52 +97,98 @@ export default function BreakdownView({
               className="text-zinc-400 hover:text-white shrink-0"
             >
               <ArrowLeft className="w-4 h-4 mr-1" />
-              <span className="hidden sm:inline">New</span>
+              <span className="hidden sm:inline">{isShareView ? "Create Yours" : "New"}</span>
             </Button>
             <h1 className="font-display text-lg md:text-xl font-bold text-white truncate">
               {character_name || "Scene Breakdown"}
             </h1>
           </div>
-          <div className="flex items-center gap-2">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  data-testid="memorization-button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={onOpenMemorization}
-                  className="text-zinc-400 hover:text-amber-500"
-                >
-                  <BookOpen className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Reader Mode</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  data-testid="export-pdf-button"
-                  variant="ghost"
-                  size="icon"
-                  onClick={onExportPdf}
-                  className="text-zinc-400 hover:text-amber-500"
-                >
-                  <Download className="w-4 h-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Export PDF</TooltipContent>
-            </Tooltip>
-            <Button
-              data-testid="regenerate-takes-button"
-              variant="ghost"
-              size="sm"
-              onClick={onRegenerate}
-              className="text-zinc-400 hover:text-amber-500 gap-1.5"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">New Takes</span>
-            </Button>
-          </div>
+          {!isShareView && (
+            <div className="flex items-center gap-1.5">
+              {onOpenSceneReader && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      data-testid="scene-reader-button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={onOpenSceneReader}
+                      className={`text-zinc-400 ${ttsAvailable ? 'hover:text-emerald-400' : 'hover:text-amber-500'}`}
+                    >
+                      <Mic className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{ttsAvailable ? "Run Lines (AI Reader)" : "Run Lines"}</TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    data-testid="memorization-button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={onOpenMemorization}
+                    className="text-zinc-400 hover:text-amber-500"
+                  >
+                    <BookOpen className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Reader Mode</TooltipContent>
+              </Tooltip>
+              {onShare && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      data-testid="share-button"
+                      variant="ghost"
+                      size="icon"
+                      onClick={onShare}
+                      className="text-zinc-400 hover:text-amber-500"
+                    >
+                      <Share2 className="w-4 h-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Share Breakdown</TooltipContent>
+                </Tooltip>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    data-testid="export-pdf-button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={onExportPdf}
+                    className="text-zinc-400 hover:text-amber-500"
+                  >
+                    <Download className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Export PDF</TooltipContent>
+              </Tooltip>
+              <Button
+                data-testid="regenerate-takes-button"
+                variant="ghost"
+                size="sm"
+                onClick={onRegenerate}
+                className="text-zinc-400 hover:text-amber-500 gap-1.5"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">New Takes</span>
+              </Button>
+            </div>
+          )}
+          {isShareView && (
+            <div className="flex items-center gap-2">
+              <a
+                href="/"
+                data-testid="share-cta-button"
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 hover:bg-amber-600 text-black text-sm font-bold rounded-md transition-colors btn-press"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Get Your Breakdown
+              </a>
+            </div>
+          )}
         </div>
       </header>
 
@@ -291,16 +344,18 @@ export default function BreakdownView({
                 <Zap className="w-4 h-4" />
                 Your Takes
               </CardTitle>
-              <Button
-                data-testid="regenerate-takes-inline"
-                variant="ghost"
-                size="sm"
-                onClick={onRegenerate}
-                className="text-xs text-zinc-500 hover:text-amber-500 gap-1"
-              >
-                <RefreshCw className="w-3 h-3" />
-                Regenerate
-              </Button>
+              {!isShareView && (
+                <Button
+                  data-testid="regenerate-takes-inline"
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRegenerate}
+                  className="text-xs text-zinc-500 hover:text-amber-500 gap-1"
+                >
+                  <RefreshCw className="w-3 h-3" />
+                  Regenerate
+                </Button>
+              )}
             </CardHeader>
             <CardContent>
               <Tabs
