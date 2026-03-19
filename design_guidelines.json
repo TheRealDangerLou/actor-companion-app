@@ -1,0 +1,150 @@
+{
+  "design_system": {
+    "identity": {
+      "name": "Actor's Companion",
+      "metaphor": "The Black Box Theater",
+      "emotion": "Focused, Intimate, Professional, Dramatic",
+      "theme_mode": "dark"
+    },
+    "colors": {
+      "palette": {
+        "background": {
+          "default": "#09090b",
+          "paper": "#18181b",
+          "subtle": "#27272a"
+        },
+        "text": {
+          "primary": "#fafafa",
+          "secondary": "#a1a1aa",
+          "muted": "#52525b"
+        },
+        "accent": {
+          "primary": "#f59e0b",
+          "secondary": "#e11d48",
+          "tertiary": "#3b82f6"
+        },
+        "border": {
+          "default": "#27272a",
+          "active": "#52525b"
+        }
+      },
+      "usage": {
+        "primary_action": "bg-amber-500 hover:bg-amber-600 text-black font-bold",
+        "secondary_action": "bg-zinc-800 hover:bg-zinc-700 text-white",
+        "destructive": "bg-rose-900/20 text-rose-500 hover:bg-rose-900/40 border border-rose-900",
+        "card_surface": "bg-zinc-950/50 border border-zinc-800 backdrop-blur-sm"
+      }
+    },
+    "typography": {
+      "fonts": {
+        "heading": {
+          "family": "Playfair Display",
+          "weights": ["600", "700", "900"],
+          "fallback": "serif"
+        },
+        "body": {
+          "family": "Manrope",
+          "weights": ["400", "500", "600"],
+          "fallback": "sans-serif"
+        },
+        "script": {
+          "family": "Courier Prime",
+          "weights": ["400", "700"],
+          "fallback": "monospace"
+        }
+      },
+      "scale": {
+        "h1": "text-4xl md:text-6xl font-black tracking-tight",
+        "h2": "text-3xl md:text-4xl font-bold tracking-tight",
+        "h3": "text-xl md:text-2xl font-semibold",
+        "body": "text-base leading-relaxed text-zinc-300",
+        "script_text": "text-lg font-mono leading-relaxed"
+      }
+    },
+    "layout": {
+      "grid_system": "Bento Grid (CSS Grid)",
+      "container": "max-w-7xl mx-auto px-4 sm:px-6 lg:px-8",
+      "spacing": {
+        "section": "py-24",
+        "element": "gap-6"
+      },
+      "radius": {
+        "default": "rounded-lg",
+        "button": "rounded-md",
+        "card": "rounded-xl"
+      }
+    },
+    "visual_enhancers": {
+      "effects": [
+        "Spotlight Gradients: Radial gradients mimicking stage lights",
+        "Grain Texture: Subtle noise overlay for filmic feel",
+        "Glassmorphism: High blur, low opacity for modals/overlays"
+      ],
+      "shadows": {
+        "glow": "shadow-[0_0_30px_-5px_rgba(245,158,11,0.15)]",
+        "card": "shadow-xl shadow-black/20"
+      }
+    }
+  },
+  "components": {
+    "Button": {
+      "specs": "Sharp or slightly rounded. High contrast. Hover lifts slightly.",
+      "variants": ["solid-amber", "outline-zinc", "ghost-white"]
+    },
+    "Card": {
+      "specs": "Dark zinc background. 1px border. Inner padding p-6 or p-8.",
+      "variants": ["interactive-hover", "static-display"]
+    },
+    "Input": {
+      "specs": "bg-zinc-900/50 border-zinc-800 focus:border-amber-500 focus:ring-1 focus:ring-amber-500 placeholder:text-zinc-600"
+    },
+    "Badge": {
+      "specs": "rounded-full px-3 py-1 text-xs font-medium tracking-wide uppercase"
+    }
+  },
+  "assets": {
+    "images": [
+      {
+        "category": "hero_background",
+        "url": "https://images.unsplash.com/photo-1761229660731-891484da5c35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHw0fHx0aGVhdGVyJTIwc3RhZ2UlMjBzcG90bGlnaHQlMjBkYXJrfGVufDB8fHx8MTc3Mzg4ODc2Mnww&ixlib=rb-4.1.0&q=85",
+        "description": "Atmospheric stage with red lighting and smoke - use for hero background with overlay"
+      },
+      {
+        "category": "texture_overlay",
+        "url": "https://images.unsplash.com/photo-1705107958696-a7f73c749ab3?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjY2NzZ8MHwxfHNlYXJjaHwxfHxmaWxtJTIwc2V0JTIwY2FtZXJhJTIwYmVoaW5kJTIwdGhlJTIwc2NlbmVzJTIwZGFya3xlbnwwfHx8fDE3NzM4ODg3NjR8MA&ixlib=rb-4.1.0&q=85",
+        "description": "Camera setup in dark room - subtle texture for sections"
+      },
+      {
+        "category": "empty_stage",
+        "url": "https://images.unsplash.com/photo-1684082757061-c11a2c9a9787?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHwxfHx0aGVhdGVyJTIwc3RhZ2UlMjBzcG90bGlnaHQlMjBkYXJrfGVufDB8fHx8MTc3Mzg4ODc2Mnww&ixlib=rb-4.1.0&q=85",
+        "description": "Empty chairs and stage - good for empty states"
+      }
+    ],
+    "icons": {
+      "library": "lucide-react",
+      "style": "Stroke width 1.5px, crisp edges"
+    }
+  },
+  "instructions_to_main_agent": [
+    "Install 'lucide-react' for icons.",
+    "Install 'framer-motion' for animations.",
+    "Install 'clsx' and 'tailwind-merge' for class handling.",
+    "Use 'Playfair Display' from Google Fonts for Headings.",
+    "Use 'Manrope' from Google Fonts for Body.",
+    "Use 'Courier Prime' from Google Fonts for Script text.",
+    "Implement a global 'noise' texture overlay using CSS fixed position pointer-events-none.",
+    "Ensure all text has sufficient contrast (APCA compliant).",
+    "Use the Bento Grid layout for the 'Breakdown' results page.",
+    "For the 'Memorization Mode', create a focused, distraction-free full-screen overlay.",
+    "Use the 'Spotlight' effect (radial gradient that follows mouse or fixed) on cards.",
+    "Add 'data-testid' to all interactive elements."
+  ],
+  "universal_guidelines": [
+    "Dark mode ONLY. Do not implement light mode toggle unless critical.",
+    "Avoid gradients on text. Keep text crisp off-white.",
+    "Use 24px-32px padding inside cards. Don't cram content.",
+    "Micro-interactions: Buttons should scale down (0.98) on click.",
+    "Inputs should have a subtle glow on focus.",
+    "Scrollbars: Custom thin scrollbar in Zinc-800."
+  ]
+}
