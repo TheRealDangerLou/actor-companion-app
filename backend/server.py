@@ -304,92 +304,79 @@ async def export_pdf(breakdown_id: str):
     def safe(text):
         if not text:
             return ""
-        # Handle unicode and limit text length for PDF rendering
-        safe_text = text.encode('latin-1', 'replace').decode('latin-1')
-        # Limit line length to prevent rendering issues
-        if len(safe_text) > 500:
-            safe_text = safe_text[:500] + "..."
-        return safe_text
+        return str(text).encode('latin-1', 'replace').decode('latin-1')
 
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=20)
+    pdf.set_left_margin(15)
+    pdf.set_right_margin(15)
     pdf.add_page()
+    w = pdf.w - pdf.l_margin - pdf.r_margin
+
+    def write_text(text, font_style='', font_size=11, line_height=6):
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font('Helvetica', font_style, font_size)
+        pdf.multi_cell(w, line_height, safe(text))
+
+    def write_heading(text, font_size=13):
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font('Helvetica', 'B', font_size)
+        pdf.multi_cell(w, 8, safe(text))
 
     # Title
     pdf.set_font('Helvetica', 'B', 22)
-    pdf.cell(0, 12, safe("ACTOR'S COMPANION"), 0, 1, 'C')
+    pdf.cell(w, 12, safe("ACTOR'S COMPANION"), 0, 1, 'C')
     pdf.set_font('Helvetica', '', 11)
-    pdf.cell(0, 8, safe("Script Breakdown"), 0, 1, 'C')
+    pdf.cell(w, 8, safe("Script Breakdown"), 0, 1, 'C')
     pdf.ln(8)
 
     # Character
-    pdf.set_font('Helvetica', 'B', 16)
-    pdf.cell(0, 10, safe(f"Character: {breakdown.get('character_name', 'Unknown')}"), 0, 1)
+    write_heading(f"Character: {breakdown.get('character_name', 'Unknown')}", 16)
     pdf.ln(4)
 
     # Scene Summary
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, safe("SCENE SUMMARY"), 0, 1)
-    pdf.set_font('Helvetica', '', 11)
-    pdf.multi_cell(0, 6, safe(breakdown.get('scene_summary', '')))
+    write_heading("SCENE SUMMARY")
+    write_text(breakdown.get('scene_summary', ''))
     pdf.ln(4)
 
     # Objective
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, safe("OBJECTIVE"), 0, 1)
-    pdf.set_font('Helvetica', '', 11)
-    pdf.multi_cell(0, 6, safe(breakdown.get('character_objective', '')))
+    write_heading("OBJECTIVE")
+    write_text(breakdown.get('character_objective', ''))
     pdf.ln(4)
 
     # Stakes
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, safe("STAKES"), 0, 1)
-    pdf.set_font('Helvetica', '', 11)
-    pdf.multi_cell(0, 6, safe(breakdown.get('stakes', '')))
-    pdf.ln(6)
+    write_heading("STAKES")
+    write_text(breakdown.get('stakes', ''))
+    pdf.ln(4)
 
     # Beats
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, safe("BEAT BREAKDOWN"), 0, 1)
+    write_heading("BEAT BREAKDOWN")
     pdf.ln(2)
     for beat in breakdown.get('beats', []):
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.cell(0, 7, safe(f"Beat {beat.get('beat_number', '')}: {beat.get('title', '')}"), 0, 1)
-        pdf.set_font('Helvetica', '', 10)
-        pdf.multi_cell(0, 5, safe(f"[{beat.get('emotion', '')}] {beat.get('description', '')}"))
-        pdf.set_font('Helvetica', 'I', 10)
+        write_heading(f"Beat {beat.get('beat_number', '')}: {beat.get('title', '')}", 11)
+        write_text(f"[{beat.get('emotion', '')}] {beat.get('description', '')}", font_size=10, line_height=5)
         subtext_text = beat.get('subtext', '')
         if subtext_text:
-            pdf.multi_cell(0, 5, safe(f"Subtext: \"{subtext_text}\""))
+            write_text(f'Subtext: "{subtext_text}"', font_style='I', font_size=10, line_height=5)
         pdf.ln(3)
 
     # Acting Takes
     pdf.add_page()
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, safe("ACTING TAKES"), 0, 1)
+    write_heading("ACTING TAKES")
     pdf.ln(2)
     takes = breakdown.get('acting_takes', {})
     for label, key in [("GROUNDED / NATURAL", "grounded"), ("BOLD / RISKY", "bold"), ("WILDCARD", "wildcard")]:
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.cell(0, 7, safe(label), 0, 1)
-        pdf.set_font('Helvetica', '', 10)
-        take_text = takes.get(key, '')
-        if take_text:
-            pdf.multi_cell(0, 5, safe(take_text))
+        write_heading(label, 11)
+        write_text(takes.get(key, ''), font_size=10, line_height=5)
         pdf.ln(4)
 
     # Self-Tape Tips
-    pdf.set_font('Helvetica', 'B', 13)
-    pdf.cell(0, 8, safe("SELF-TAPE TIPS"), 0, 1)
+    write_heading("SELF-TAPE TIPS")
     pdf.ln(2)
     tips = breakdown.get('self_tape_tips', {})
     for label, key in [("Framing", "framing"), ("Eyeline", "eyeline"), ("Tone & Energy", "tone_energy")]:
-        pdf.set_font('Helvetica', 'B', 11)
-        pdf.cell(0, 7, safe(label), 0, 1)
-        pdf.set_font('Helvetica', '', 10)
-        tip_text = tips.get(key, '')
-        if tip_text:
-            pdf.multi_cell(0, 5, safe(tip_text))
+        write_heading(label, 11)
+        write_text(tips.get(key, ''), font_size=10, line_height=5)
         pdf.ln(2)
 
     pdf_bytes = pdf.output()
