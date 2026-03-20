@@ -3,10 +3,13 @@
 /* Root app */
 .app-root {
   min-height: 100vh;
+  min-height: 100dvh;
   background-color: #09090b;
   color: #fafafa;
   font-family: 'Manrope', sans-serif;
   position: relative;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 /* Noise texture overlay */
@@ -149,4 +152,50 @@
 
 .reader-line-dimmed {
   opacity: 0.3;
+}
+
+/* Mobile-first teleprompter enhancements */
+@media (max-width: 640px) {
+  .teleprompter-text {
+    font-size: 1.5rem !important;
+    line-height: 1.8 !important;
+    letter-spacing: 0.01em;
+  }
+
+  .mobile-touch-target {
+    min-height: 48px;
+    min-width: 48px;
+  }
+
+  .mobile-header-compact {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  .mobile-bottom-safe {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+/* Scroll snap for teleprompter chunks */
+.teleprompter-scroll {
+  scroll-snap-type: y mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+
+.teleprompter-snap-item {
+  scroll-snap-align: center;
+}
+
+/* Keep screen awake indicator */
+.awake-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: #22c55e;
+  animation: awake-pulse 2s ease-in-out infinite;
+}
+
+@keyframes awake-pulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
 }

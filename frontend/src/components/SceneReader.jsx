@@ -20,6 +20,21 @@ import {
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
+function useWakeLock() {
+  const wakeLockRef = useRef(null);
+  useEffect(() => {
+    const request = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLockRef.current = await navigator.wakeLock.request("screen");
+        }
+      } catch (e) { /* non-critical */ }
+    };
+    request();
+    return () => { wakeLockRef.current?.release().catch(() => {}); };
+  }, []);
+}
+
 export default function SceneReader({
   memorization,
   characterName,
@@ -34,8 +49,22 @@ export default function SceneReader({
   const audioRef = useRef(null);
   const abortRef = useRef(false);
   const timeoutRef = useRef(null);
+  const cueRefs = useRef([]);
+  const scrollContainerRef = useRef(null);
+
+  useWakeLock();
 
   const cues = memorization?.cue_recall || [];
+
+  // Auto-scroll to active cue
+  useEffect(() => {
+    if (currentCue >= 0 && cueRefs.current[currentCue]) {
+      cueRefs.current[currentCue].scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }
+  }, [currentCue]);
 
   useEffect(() => {
     return () => {
@@ -224,10 +253,10 @@ export default function SceneReader({
       </div>
 
       {/* Scene Content */}
-      <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-6">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 mobile-bottom-safe">
         <div className="max-w-2xl mx-auto space-y-3">
           {!ttsAvailable && (
-            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 mb-6">
+            <div className="bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 mb-4 sm:mb-6">
               <p className="text-sm text-zinc-400">
                 <span className="text-amber-500 font-semibold">Voice not connected.</span>{" "}
                 Add your ElevenLabs API key to hear the other character read their lines. For now, use the text cues below.
@@ -254,6 +283,7 @@ export default function SceneReader({
             return (
               <motion.div
                 key={i}
+                ref={(el) => (cueRefs.current[i] = el)}
                 initial={false}
                 animate={{
                   opacity: isFuture ? 0.25 : 1,
@@ -273,7 +303,7 @@ export default function SceneReader({
                 <div className="px-4 py-3 border-b border-zinc-800/30 flex items-start gap-3">
                   <div className="flex-1">
                     <p className="text-xs uppercase tracking-wider text-zinc-600 mb-1">Cue</p>
-                    <p className={`text-sm font-script ${isActive ? 'text-zinc-200' : 'text-zinc-400'}`}>
+                    <p className={`text-sm sm:text-base font-script ${isActive ? 'text-zinc-200' : 'text-zinc-400'}`}>
                       {item.cue}
                     </p>
                   </div>
@@ -294,7 +324,7 @@ export default function SceneReader({
                 <div className="px-4 py-3">
                   <p className="text-xs uppercase tracking-wider text-amber-500/60 mb-1">Your Line</p>
                   <p
-                    className={`font-script text-base transition-all duration-300 ${
+                    className={`font-script text-base sm:text-lg transition-all duration-300 ${
                       isActive && !showYourLine
                         ? "text-zinc-100 blur-sm select-none"
                         : isActive && showYourLine
