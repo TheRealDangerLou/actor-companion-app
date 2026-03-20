@@ -238,13 +238,50 @@ async def analyze_text(request: AnalyzeTextRequest):
 
 @api_router.post("/analyze/image")
 async def analyze_image(file: UploadFile = File(...)):
-    allowed = {"image/jpeg", "image/png", "image/webp"}
-    if file.content_type not in allowed:
-        raise HTTPException(status_code=400, detail="Only JPEG, PNG, and WebP images are supported")
-
     contents = await file.read()
-    if len(contents) > 10 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="Image must be under 10MB")
+    if len(contents) > 15 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File must be under 15MB")
+
+    content_type = file.content_type or ""
+    filename = (file.filename or "").lower()
+
+    # PDF handling — extract text directly
+    if content_type == "application/pdf" or filename.endswith(".pdf"):
+        try:
+            from PyPDF2 import PdfReader
+            pdf_reader = PdfReader(io.BytesIO(contents))
+            extracted_text = ""
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    extracted_text += page_text + "\n"
+            extracted_text = extracted_text.strip()
+            if len(extracted_text) < 10:
+                raise HTTPException(status_code=400, detail="Could not extract text from PDF. Try uploading an image of your sides instead.")
+            result = await analyze_with_gpt(text=extracted_text)
+            breakdown_id = str(uuid.uuid4())
+            doc = {
+                "id": breakdown_id,
+                "original_text": extracted_text,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                **result
+            }
+            await db.breakdowns.insert_one(doc)
+            stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+            return stored
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"PDF processing error: {e}")
+            raise HTTPException(status_code=400, detail="Failed to read PDF. Try uploading an image instead.")
+
+    # Image handling — accept all common image types including HEIC
+    image_types = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "image/bmp", "image/tiff"}
+    image_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff", ".tif"}
+    is_image = content_type in image_types or any(filename.endswith(ext) for ext in image_extensions) or content_type.startswith("image/")
+
+    if not is_image:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload an image (JPG, PNG, HEIC) or a PDF of your sides.")
 
     base64_image = base64.b64encode(contents).decode('utf-8')
     result = await analyze_with_gpt(image_base64=base64_image)

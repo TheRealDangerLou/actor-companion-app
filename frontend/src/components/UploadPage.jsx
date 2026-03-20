@@ -17,14 +17,23 @@ export default function UploadPage({ onAnalyze }) {
 
   const handleImageSelect = useCallback((file) => {
     if (!file) return;
-    const allowed = ["image/jpeg", "image/png", "image/webp"];
-    if (!allowed.includes(file.type)) {
+    const imageTypes = ["image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "image/bmp", "image/tiff"];
+    const isPdf = file.type === "application/pdf" || file.name?.toLowerCase().endsWith(".pdf");
+    const isImage = imageTypes.includes(file.type) || file.type?.startsWith("image/");
+
+    if (!isImage && !isPdf) {
+      const { toast } = require("sonner");
+      toast.error("Upload an image or PDF of your sides");
       return;
     }
     setImageFile(file);
-    const reader = new FileReader();
-    reader.onload = (e) => setImagePreview(e.target.result);
-    reader.readAsDataURL(file);
+    if (isPdf) {
+      setImagePreview(null);
+    } else {
+      const reader = new FileReader();
+      reader.onload = (e) => setImagePreview(e.target.result);
+      reader.readAsDataURL(file);
+    }
   }, []);
 
   const handleDrop = useCallback((e) => {
@@ -100,8 +109,8 @@ export default function UploadPage({ onAnalyze }) {
                 data-testid="upload-image-tab"
                 className="flex-1 gap-1.5 text-xs sm:text-sm data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-500"
               >
-                <Image className="w-4 h-4" />
-                <span className="hidden sm:inline">Upload</span> Image
+                <Upload className="w-4 h-4" />
+                <span className="hidden sm:inline">Upload</span> File
               </TabsTrigger>
               <TabsTrigger
                 value="camera"
@@ -163,6 +172,23 @@ export default function UploadPage({ onAnalyze }) {
                       x
                     </button>
                   </div>
+                ) : imageFile ? (
+                  <div className="flex flex-col items-center gap-2 p-4">
+                    <FileText className="w-10 h-10 text-amber-500/60" />
+                    <p className="text-sm text-zinc-300 font-medium truncate max-w-full px-4">{imageFile.name}</p>
+                    <p className="text-xs text-zinc-500">PDF ready to analyze</p>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImageFile(null);
+                        setImagePreview(null);
+                      }}
+                      className="text-xs text-zinc-500 hover:text-white underline mt-1"
+                      data-testid="clear-file-button"
+                    >
+                      Remove
+                    </button>
+                  </div>
                 ) : (
                   <>
                     <Upload className="w-8 h-8 text-zinc-600 mb-3" />
@@ -171,14 +197,14 @@ export default function UploadPage({ onAnalyze }) {
                       <span className="text-amber-500">browse</span>
                     </p>
                     <p className="text-xs text-zinc-600 mt-1">
-                      JPG, PNG, or WebP up to 10MB
+                      Images, PDFs, or photos up to 15MB
                     </p>
                   </>
                 )}
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/webp"
+                  accept="image/*,.pdf,application/pdf"
                   onChange={(e) => handleImageSelect(e.target.files[0])}
                   className="hidden"
                   data-testid="image-upload-input"
