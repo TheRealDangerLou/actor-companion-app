@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Upload, FileText, Image, Sparkles, ArrowRight } from "lucide-react";
+import { Upload, FileText, Image, Sparkles, ArrowRight, Camera } from "lucide-react";
 
 const HERO_BG = "https://images.unsplash.com/photo-1761229660731-891484da5c35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHw0fHx0aGVhdGVyJTIwc3RhZ2UlMjBzcG90bGlnaHQlMjBkYXJrfGVufDB8fHx8MTc3Mzg4ODc2Mnww&ixlib=rb-4.1.0&q=85&w=1920";
 
@@ -13,6 +13,7 @@ export default function UploadPage({ onAnalyze }) {
   const [imagePreview, setImagePreview] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
+  const cameraInputRef = useRef(null);
 
   const handleImageSelect = useCallback((file) => {
     if (!file) return;
@@ -36,14 +37,15 @@ export default function UploadPage({ onAnalyze }) {
   const handleSubmit = () => {
     if (tab === "text" && scriptText.trim().length >= 10) {
       onAnalyze({ type: "text", text: scriptText });
-    } else if (tab === "image" && imageFile) {
+    } else if ((tab === "image" || tab === "camera") && imageFile) {
       onAnalyze({ type: "image", file: imageFile });
     }
   };
 
   const canSubmit =
     (tab === "text" && scriptText.trim().length >= 10) ||
-    (tab === "image" && imageFile);
+    (tab === "image" && imageFile) ||
+    (tab === "camera" && imageFile);
 
   return (
     <div className="relative min-h-screen flex items-center justify-center px-4 py-12">
@@ -88,18 +90,26 @@ export default function UploadPage({ onAnalyze }) {
               <TabsTrigger
                 value="text"
                 data-testid="upload-text-tab"
-                className="flex-1 gap-2 data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-500"
+                className="flex-1 gap-1.5 text-xs sm:text-sm data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-500"
               >
                 <FileText className="w-4 h-4" />
-                Paste Script
+                <span className="hidden sm:inline">Paste</span> Script
               </TabsTrigger>
               <TabsTrigger
                 value="image"
                 data-testid="upload-image-tab"
-                className="flex-1 gap-2 data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-500"
+                className="flex-1 gap-1.5 text-xs sm:text-sm data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-500"
               >
                 <Image className="w-4 h-4" />
-                Upload Image
+                <span className="hidden sm:inline">Upload</span> Image
+              </TabsTrigger>
+              <TabsTrigger
+                value="camera"
+                data-testid="upload-camera-tab"
+                className="flex-1 gap-1.5 text-xs sm:text-sm data-[state=active]:bg-amber-500/10 data-[state=active]:text-amber-500 sm:hidden"
+              >
+                <Camera className="w-4 h-4" />
+                Snap
               </TabsTrigger>
             </TabsList>
 
@@ -172,6 +182,57 @@ export default function UploadPage({ onAnalyze }) {
                   onChange={(e) => handleImageSelect(e.target.files[0])}
                   className="hidden"
                   data-testid="image-upload-input"
+                />
+              </div>
+            </TabsContent>
+
+            {/* Camera Tab — mobile only */}
+            <TabsContent value="camera">
+              <div
+                data-testid="camera-capture-zone"
+                onClick={() => cameraInputRef.current?.click()}
+                className="w-full h-56 md:h-64 border-2 border-dashed border-zinc-800 bg-zinc-900/30 rounded-lg flex flex-col items-center justify-center cursor-pointer hover:border-zinc-700 transition-all"
+              >
+                {imagePreview ? (
+                  <div className="relative w-full h-full p-4">
+                    <img
+                      src={imagePreview}
+                      alt="Captured"
+                      className="w-full h-full object-contain rounded"
+                    />
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setImageFile(null);
+                        setImagePreview(null);
+                      }}
+                      className="absolute top-2 right-2 bg-zinc-900/80 text-zinc-400 hover:text-white rounded-full w-8 h-8 flex items-center justify-center text-sm border border-zinc-700 mobile-touch-target"
+                      data-testid="clear-camera-image"
+                    >
+                      x
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <Camera className="w-10 h-10 text-amber-500/60 mb-3" />
+                    <p className="text-sm text-zinc-400 font-semibold">
+                      Snap your sides
+                    </p>
+                    <p className="text-xs text-zinc-600 mt-1">
+                      Opens your camera directly
+                    </p>
+                  </>
+                )}
+                <input
+                  ref={cameraInputRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  onChange={(e) => {
+                    handleImageSelect(e.target.files[0]);
+                  }}
+                  className="hidden"
+                  data-testid="camera-capture-input"
                 />
               </div>
             </TabsContent>
