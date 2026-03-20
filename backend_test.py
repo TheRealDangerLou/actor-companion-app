@@ -209,6 +209,245 @@ This time I mean it."""
             
         return None
 
+    def test_image_analysis_with_context(self):
+        """Test POST /api/analyze/image with context field"""
+        try:
+            # Create test image
+            image_data = self.create_test_image()
+            if not image_data:
+                self.log_test("Image Analysis with Context", False, "Could not create test image")
+                return None
+                
+            # Test context data
+            context = "Character I'm playing: Mary\n\nProject synopsis: Drama about two friends facing a difficult decision\n\nNotes from casting: They want her vulnerable but strong\n\nCharacter description: Late 20s, has been through a lot but still hopeful"
+            
+            print(f"📷 Testing image analysis with context ({len(context)} chars)")
+            print("⏳ This may take 30-60 seconds due to GPT-5.2 processing...")
+            
+            files = {'file': ('test_script.png', image_data, 'image/png')}
+            data = {'context': context}
+            
+            start_time = time.time()
+            response = self.session.post(
+                f"{self.base_url}/analyze/image", 
+                files=files,
+                data=data,
+                timeout=120
+            )
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            success = response.status_code == 200
+            
+            if success:
+                response_data = response.json()
+                breakdown_id = response_data.get("id")
+                if breakdown_id:
+                    self.breakdown_ids.append(breakdown_id)
+                
+                # Validate structure
+                required_fields = [
+                    "id", "scene_summary", "character_name", "character_objective", 
+                    "stakes", "beats", "acting_takes", "memorization", "self_tape_tips"
+                ]
+                missing_fields = [field for field in required_fields if field not in response_data]
+                
+                if not missing_fields:
+                    self.log_test("Image Analysis with Context", True, f"Processing time: {processing_time:.2f}s, ID: {breakdown_id}")
+                    return response_data
+                else:
+                    self.log_test("Image Analysis with Context", False, f"Missing required fields: {missing_fields}")
+            else:
+                self.log_test("Image Analysis with Context", False, f"Status: {response.status_code}, Response: {response.text}")
+                
+        except Exception as e:
+            self.log_test("Image Analysis with Context", False, f"Exception: {str(e)}")
+            
+        return None
+
+    def create_test_pdf(self):
+        """Create a simple test PDF with script content"""
+        try:
+            from reportlab.pdfgen import canvas
+            from reportlab.lib.pagesizes import letter
+            import io
+            
+            buffer = io.BytesIO()
+            p = canvas.Canvas(buffer, pagesize=letter)
+            
+            # Add script content to PDF
+            script_lines = [
+                "AUDITION SIDES - SCENE 1",
+                "",
+                "MARCUS",
+                "I wasn't sure you'd come.",
+                "",
+                "ELENA", 
+                "You don't get to be surprised.",
+                "",
+                "MARCUS",
+                "I came back.",
+                "",
+                "ELENA",
+                "That doesn't fix it."
+            ]
+            
+            y_position = 750
+            for line in script_lines:
+                p.drawString(50, y_position, line)
+                y_position -= 30
+                
+            p.save()
+            buffer.seek(0)
+            return buffer.getvalue()
+            
+        except ImportError:
+            # Fallback: create a simple text-based PDF using fpdf
+            try:
+                from fpdf import FPDF
+                
+                pdf = FPDF()
+                pdf.add_page()
+                pdf.set_font('Arial', 'B', 16)
+                
+                script_lines = [
+                    "AUDITION SIDES - SCENE 1",
+                    "",
+                    "MARCUS",
+                    "I wasn't sure you'd come.",
+                    "",
+                    "ELENA", 
+                    "You don't get to be surprised.",
+                    "",
+                    "MARCUS",
+                    "I came back.",
+                    "",
+                    "ELENA",
+                    "That doesn't fix it."
+                ]
+                
+                for line in script_lines:
+                    if line.strip():
+                        pdf.cell(0, 10, line, ln=True)
+                    else:
+                        pdf.ln(5)
+                
+                return pdf.output()
+                
+            except ImportError:
+                print("Neither reportlab nor fpdf available for PDF creation")
+                return None
+        except Exception as e:
+            print(f"Error creating test PDF: {e}")
+            return None
+
+    def test_pdf_analysis(self):
+        """Test POST /api/analyze/image with PDF file"""
+        try:
+            # Create test PDF
+            pdf_data = self.create_test_pdf()
+            if not pdf_data:
+                self.log_test("PDF Analysis", False, "Could not create test PDF")
+                return None
+                
+            print(f"📄 Testing PDF analysis with {len(pdf_data)} byte PDF")
+            print("⏳ This may take 30-60 seconds due to GPT-5.2 processing...")
+            
+            files = {'file': ('test_script.pdf', pdf_data, 'application/pdf')}
+            
+            start_time = time.time()
+            response = self.session.post(
+                f"{self.base_url}/analyze/image", 
+                files=files, 
+                timeout=120
+            )
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            success = response.status_code == 200
+            
+            if success:
+                data = response.json()
+                breakdown_id = data.get("id")
+                if breakdown_id:
+                    self.breakdown_ids.append(breakdown_id)
+                
+                # Validate structure
+                required_fields = [
+                    "id", "scene_summary", "character_name", "character_objective", 
+                    "stakes", "beats", "acting_takes", "memorization", "self_tape_tips"
+                ]
+                missing_fields = [field for field in required_fields if field not in data]
+                
+                if not missing_fields:
+                    self.log_test("PDF Analysis", True, f"Processing time: {processing_time:.2f}s, ID: {breakdown_id}")
+                    return data
+                else:
+                    self.log_test("PDF Analysis", False, f"Missing required fields: {missing_fields}")
+            else:
+                self.log_test("PDF Analysis", False, f"Status: {response.status_code}, Response: {response.text}")
+                
+        except Exception as e:
+            self.log_test("PDF Analysis", False, f"Exception: {str(e)}")
+            
+        return None
+
+    def test_pdf_analysis_with_context(self):
+        """Test POST /api/analyze/image with PDF file and context"""
+        try:
+            # Create test PDF
+            pdf_data = self.create_test_pdf()
+            if not pdf_data:
+                self.log_test("PDF Analysis with Context", False, "Could not create test PDF")
+                return None
+                
+            # Test context data
+            context = "Character I'm playing: Elena\n\nProject synopsis: Intense drama about betrayal and forgiveness\n\nNotes from casting: They want her guarded but not cold\n\nCharacter description: Strong woman who's been hurt but still capable of love"
+            
+            print(f"📄 Testing PDF analysis with context ({len(context)} chars)")
+            print("⏳ This may take 30-60 seconds due to GPT-5.2 processing...")
+            
+            files = {'file': ('test_script.pdf', pdf_data, 'application/pdf')}
+            data = {'context': context}
+            
+            start_time = time.time()
+            response = self.session.post(
+                f"{self.base_url}/analyze/image", 
+                files=files,
+                data=data,
+                timeout=120
+            )
+            end_time = time.time()
+            processing_time = end_time - start_time
+            
+            success = response.status_code == 200
+            
+            if success:
+                response_data = response.json()
+                breakdown_id = response_data.get("id")
+                if breakdown_id:
+                    self.breakdown_ids.append(breakdown_id)
+                
+                # Validate structure
+                required_fields = [
+                    "id", "scene_summary", "character_name", "character_objective", 
+                    "stakes", "beats", "acting_takes", "memorization", "self_tape_tips"
+                ]
+                missing_fields = [field for field in required_fields if field not in response_data]
+                
+                if not missing_fields:
+                    self.log_test("PDF Analysis with Context", True, f"Processing time: {processing_time:.2f}s, ID: {breakdown_id}")
+                    return response_data
+                else:
+                    self.log_test("PDF Analysis with Context", False, f"Missing required fields: {missing_fields}")
+            else:
+                self.log_test("PDF Analysis with Context", False, f"Status: {response.status_code}, Response: {response.text}")
+                
+        except Exception as e:
+            self.log_test("PDF Analysis with Context", False, f"Exception: {str(e)}")
+            
+        return None
+
     def test_get_breakdown(self, breakdown_id):
         """Test GET /api/breakdowns/{id}"""
         if not breakdown_id:
@@ -304,7 +543,7 @@ This time I mean it."""
             self.log_test("PDF Export", False, f"Exception: {str(e)}")
 
     def test_tts_status(self):
-        """Test GET /api/tts/status - should return {available: false} since no API key"""
+        """Test GET /api/tts/status - should return {available: true} since API key is configured"""
         try:
             response = self.session.get(f"{self.base_url}/tts/status", timeout=10)
             success = response.status_code == 200
@@ -312,11 +551,11 @@ This time I mean it."""
             if success:
                 data = response.json()
                 available = data.get("available")
-                # Since ELEVENLABS_API_KEY is empty, should be False
-                if available is False:
-                    self.log_test("TTS Status", True, f"Available: {available} (correct - no API key)")
+                # Since ELEVENLABS_API_KEY is configured, should be True
+                if available is True:
+                    self.log_test("TTS Status", True, f"Available: {available} (correct - API key configured)")
                 else:
-                    self.log_test("TTS Status", False, f"Expected available=false, got {available}")
+                    self.log_test("TTS Status", False, f"Expected available=true, got {available}")
             else:
                 self.log_test("TTS Status", False, f"Status: {response.status_code}, Response: {response.text}")
                 
@@ -324,7 +563,7 @@ This time I mean it."""
             self.log_test("TTS Status", False, f"Exception: {str(e)}")
 
     def test_tts_voices(self):
-        """Test GET /api/tts/voices - should return {voices: [], available: false}"""
+        """Test GET /api/tts/voices - should return voices list since API key is configured"""
         try:
             response = self.session.get(f"{self.base_url}/tts/voices", timeout=10)
             success = response.status_code == 200
@@ -334,11 +573,11 @@ This time I mean it."""
                 voices = data.get("voices", [])
                 available = data.get("available")
                 
-                # Since no API key, should have empty voices and available=false
-                if isinstance(voices, list) and len(voices) == 0 and available is False:
-                    self.log_test("TTS Voices", True, f"Voices: {len(voices)}, Available: {available} (correct)")
+                # Since API key is configured, should have voices and available=true
+                if isinstance(voices, list) and available is True:
+                    self.log_test("TTS Voices", True, f"Voices: {len(voices)}, Available: {available}")
                 else:
-                    self.log_test("TTS Voices", False, f"Expected empty voices and available=false, got voices={len(voices)}, available={available}")
+                    self.log_test("TTS Voices", False, f"Expected voices list and available=true, got voices={len(voices)}, available={available}")
             else:
                 self.log_test("TTS Voices", False, f"Status: {response.status_code}, Response: {response.text}")
                 
@@ -346,21 +585,21 @@ This time I mean it."""
             self.log_test("TTS Voices", False, f"Exception: {str(e)}")
 
     def test_tts_generate(self):
-        """Test POST /api/tts/generate - should return 503 when no API key"""
+        """Test POST /api/tts/generate - should work since API key is configured"""
         try:
             payload = {"text": "Hello, this is a test line."}
             response = self.session.post(f"{self.base_url}/tts/generate", json=payload, timeout=15)
             
-            # Should return 503 Service Unavailable since no API key
-            if response.status_code == 503:
-                data = response.json() if response.content else {}
-                detail = data.get("detail", "")
-                if "ElevenLabs API key" in detail:
-                    self.log_test("TTS Generate", True, f"Status: 503, Expected error: {detail}")
+            # Should return 200 since API key is configured
+            if response.status_code == 200:
+                data = response.json()
+                audio_url = data.get("audio_url", "")
+                if audio_url.startswith("data:audio/mpeg;base64,"):
+                    self.log_test("TTS Generate", True, f"Status: 200, Generated audio URL")
                 else:
-                    self.log_test("TTS Generate", False, f"Status: 503 but unexpected error message: {detail}")
+                    self.log_test("TTS Generate", False, f"Status: 200 but invalid audio URL format: {audio_url[:50]}...")
             else:
-                self.log_test("TTS Generate", False, f"Expected 503, got {response.status_code}: {response.text}")
+                self.log_test("TTS Generate", False, f"Expected 200, got {response.status_code}: {response.text}")
                 
         except Exception as e:
             self.log_test("TTS Generate", False, f"Exception: {str(e)}")
@@ -374,8 +613,8 @@ This time I mean it."""
         # Test health check first
         self.test_health_check()
         
-        # Test NEW TTS endpoints (key feature to verify)
-        print("\n🔊 Testing NEW TTS Endpoints...")
+        # Test TTS endpoints (key feature to verify)
+        print("\n🔊 Testing TTS Endpoints...")
         self.test_tts_status()
         self.test_tts_voices()
         self.test_tts_generate()
@@ -383,8 +622,14 @@ This time I mean it."""
         # Test text analysis and use the breakdown for dependent tests
         text_breakdown = self.test_text_analysis()
         
-        # Test image analysis
+        # Test NEW FEATURES: image analysis with context
+        print("\n📷 Testing NEW FEATURES: Image & PDF Analysis with Context...")
         image_breakdown = self.test_image_analysis()
+        image_context_breakdown = self.test_image_analysis_with_context()
+        
+        # Test NEW FEATURES: PDF analysis
+        pdf_breakdown = self.test_pdf_analysis()
+        pdf_context_breakdown = self.test_pdf_analysis_with_context()
         
         # Test dependent endpoints if we have breakdown IDs
         if self.breakdown_ids:

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, APIRouter, UploadFile, File, HTTPException
+from fastapi import FastAPI, APIRouter, UploadFile, File, Form, HTTPException
 from fastapi.responses import StreamingResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -179,7 +179,7 @@ def parse_json_response(response_text):
     raise ValueError("Could not parse JSON from response")
 
 
-async def analyze_with_gpt(text=None, image_base64=None):
+async def analyze_with_gpt(text=None, image_base64=None, context=None):
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     if not api_key:
         raise HTTPException(status_code=500, detail="LLM API key not configured")
@@ -192,8 +192,11 @@ async def analyze_with_gpt(text=None, image_base64=None):
 
     if image_base64:
         image_content = ImageContent(image_base64=image_base64)
+        vision_prompt = "Extract ALL text from this audition sides image, then analyze it as a script. Provide the full acting breakdown. Also include a field 'extracted_text' with the raw text you read from the image."
+        if context:
+            vision_prompt = f"{context}\n{vision_prompt}"
         user_msg = UserMessage(
-            text="Extract ALL text from this audition sides image, then analyze it as a script. Provide the full acting breakdown. Also include a field 'extracted_text' with the raw text you read from the image.",
+            text=vision_prompt,
             file_contents=[image_content]
         )
     else:
@@ -237,10 +240,14 @@ async def analyze_text(request: AnalyzeTextRequest):
 
 
 @api_router.post("/analyze/image")
-async def analyze_image(file: UploadFile = File(...)):
+async def analyze_image(file: UploadFile = File(...), context: Optional[str] = Form(None)):
     contents = await file.read()
     if len(contents) > 15 * 1024 * 1024:
         raise HTTPException(status_code=400, detail="File must be under 15MB")
+
+    context_prefix = ""
+    if context and context.strip():
+        context_prefix = f"[CONTEXT FOR ANALYSIS]\n{context.strip()}\n\n"
 
     content_type = file.content_type or ""
     filename = (file.filename or "").lower()
@@ -258,7 +265,8 @@ async def analyze_image(file: UploadFile = File(...)):
             extracted_text = extracted_text.strip()
             if len(extracted_text) < 10:
                 raise HTTPException(status_code=400, detail="Could not extract text from PDF. Try uploading an image of your sides instead.")
-            result = await analyze_with_gpt(text=extracted_text)
+            full_text = context_prefix + extracted_text if context_prefix else extracted_text
+            result = await analyze_with_gpt(text=full_text)
             breakdown_id = str(uuid.uuid4())
             doc = {
                 "id": breakdown_id,
@@ -284,7 +292,7 @@ async def analyze_image(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="Unsupported file type. Upload an image (JPG, PNG, HEIC) or a PDF of your sides.")
 
     base64_image = base64.b64encode(contents).decode('utf-8')
-    result = await analyze_with_gpt(image_base64=base64_image)
+    result = await analyze_with_gpt(image_base64=base64_image, context=context_prefix if context_prefix else None)
 
     breakdown_id = str(uuid.uuid4())
     original_text = result.pop("extracted_text", "Image analysis")

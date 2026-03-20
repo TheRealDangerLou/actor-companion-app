@@ -34,6 +34,9 @@ function MainApp() {
       } else {
         const formData = new FormData();
         formData.append("file", data.file);
+        if (data.context) {
+          formData.append("context", data.context);
+        }
         response = await axios.post(`${API}/analyze/image`, formData);
       }
       setBreakdown(response.data);
