@@ -182,6 +182,72 @@
   -webkit-overflow-scrolling: touch;
 }
 
+/* ===== Print Stylesheet ===== */
+@media print {
+  body, .app-root {
+    background: white !important;
+    color: black !important;
+  }
+
+  .noise-overlay,
+  header,
+  [data-testid="new-analysis-button"],
+  [data-testid="regenerate-takes-button"],
+  [data-testid="regenerate-takes-inline"],
+  [data-testid="export-pdf-button"],
+  [data-testid="memorization-button"],
+  [data-testid="scene-reader-button"],
+  [data-testid="share-button"],
+  [data-testid="share-cta-button"],
+  .fixed,
+  [class*="Toaster"] {
+    display: none !important;
+  }
+
+  [data-testid="breakdown-view"] {
+    background: white !important;
+    padding: 0 !important;
+  }
+
+  [data-testid="breakdown-view"] [class*="card"] {
+    background: white !important;
+    border: 1px solid #ddd !important;
+    box-shadow: none !important;
+    break-inside: avoid;
+    margin-bottom: 12pt;
+  }
+
+  [data-testid="breakdown-view"] [class*="CardTitle"],
+  [data-testid="breakdown-view"] h1,
+  [data-testid="breakdown-view"] h2,
+  [data-testid="breakdown-view"] h3 {
+    color: black !important;
+  }
+
+  [data-testid="breakdown-view"] p,
+  [data-testid="breakdown-view"] span,
+  [data-testid="breakdown-view"] div {
+    color: #222 !important;
+  }
+
+  [data-testid="breakdown-view"] .text-amber-500,
+  [data-testid="breakdown-view"] .text-amber-500\/80,
+  [data-testid="breakdown-view"] .text-rose-500\/80 {
+    color: black !important;
+    font-weight: bold !important;
+  }
+
+  .keyword-highlight {
+    color: black !important;
+    text-decoration: underline !important;
+    font-weight: 700 !important;
+  }
+
+  @page {
+    margin: 1.5cm;
+  }
+}
+
 .teleprompter-snap-item {
   scroll-snap-align: center;
 }

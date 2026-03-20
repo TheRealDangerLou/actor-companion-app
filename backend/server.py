@@ -413,84 +413,119 @@ async def export_pdf(breakdown_id: str):
         return str(text).encode('latin-1', 'replace').decode('latin-1')
 
     pdf = FPDF()
-    pdf.set_auto_page_break(auto=True, margin=20)
-    pdf.set_left_margin(15)
-    pdf.set_right_margin(15)
+    pdf.set_auto_page_break(auto=True, margin=18)
+    pdf.set_left_margin(20)
+    pdf.set_right_margin(20)
     pdf.add_page()
     w = pdf.w - pdf.l_margin - pdf.r_margin
 
-    def write_text(text, font_style='', font_size=11, line_height=6):
+    def divider():
+        pdf.set_draw_color(180, 180, 180)
+        y = pdf.get_y()
+        pdf.line(pdf.l_margin, y, pdf.l_margin + w, y)
+        pdf.ln(6)
+
+    def section_label(text):
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font('Helvetica', '', 8)
+        pdf.set_text_color(120, 120, 120)
+        pdf.cell(w, 5, safe(text.upper()), 0, 1)
+        pdf.set_text_color(0, 0, 0)
+
+    def section_body(text, font_style='', font_size=11, line_height=6):
         pdf.set_x(pdf.l_margin)
         pdf.set_font('Helvetica', font_style, font_size)
         pdf.multi_cell(w, line_height, safe(text))
 
-    def write_heading(text, font_size=13):
+    # --- Header ---
+    char_name = breakdown.get('character_name', 'Unknown')
+    pdf.set_font('Helvetica', 'B', 20)
+    pdf.cell(w, 10, safe(char_name.upper()), 0, 1)
+    pdf.set_font('Helvetica', '', 9)
+    pdf.set_text_color(100, 100, 100)
+    pdf.cell(w, 5, safe("Script Breakdown  |  Actor's Companion"), 0, 1)
+    pdf.set_text_color(0, 0, 0)
+    pdf.ln(4)
+    divider()
+
+    # --- Scene Summary (one-liner) ---
+    summary = breakdown.get('scene_summary', '')
+    if summary:
+        pdf.set_font('Helvetica', 'I', 10)
+        pdf.set_text_color(80, 80, 80)
         pdf.set_x(pdf.l_margin)
-        pdf.set_font('Helvetica', 'B', font_size)
-        pdf.multi_cell(w, 8, safe(text))
-
-    # Title
-    pdf.set_font('Helvetica', 'B', 22)
-    pdf.cell(w, 12, safe("ACTOR'S COMPANION"), 0, 1, 'C')
-    pdf.set_font('Helvetica', '', 11)
-    pdf.cell(w, 8, safe("Script Breakdown"), 0, 1, 'C')
-    pdf.ln(8)
-
-    # Character
-    write_heading(f"Character: {breakdown.get('character_name', 'Unknown')}", 16)
-    pdf.ln(4)
-
-    # Scene Summary
-    write_heading("SCENE SUMMARY")
-    write_text(breakdown.get('scene_summary', ''))
-    pdf.ln(4)
-
-    # Objective
-    write_heading("OBJECTIVE")
-    write_text(breakdown.get('character_objective', ''))
-    pdf.ln(4)
-
-    # Stakes
-    write_heading("STAKES")
-    write_text(breakdown.get('stakes', ''))
-    pdf.ln(4)
-
-    # Beats
-    write_heading("BEAT BREAKDOWN")
-    pdf.ln(2)
-    for beat in breakdown.get('beats', []):
-        write_heading(f"Beat {beat.get('beat_number', '')}: {beat.get('title', '')}", 11)
-        write_text(f"[{beat.get('emotion', '')}] {beat.get('description', '')}", font_size=10, line_height=5)
-        subtext_text = beat.get('subtext', '')
-        if subtext_text:
-            write_text(f'Subtext: "{subtext_text}"', font_style='I', font_size=10, line_height=5)
-        pdf.ln(3)
-
-    # Acting Takes
-    pdf.add_page()
-    write_heading("ACTING TAKES")
-    pdf.ln(2)
-    takes = breakdown.get('acting_takes', {})
-    for label, key in [("GROUNDED / NATURAL", "grounded"), ("BOLD / RISKY", "bold"), ("WILDCARD", "wildcard")]:
-        write_heading(label, 11)
-        write_text(takes.get(key, ''), font_size=10, line_height=5)
+        pdf.multi_cell(w, 5, safe(summary))
+        pdf.set_text_color(0, 0, 0)
         pdf.ln(4)
 
-    # Self-Tape Tips
-    write_heading("SELF-TAPE TIPS")
+    # --- Objective & Stakes side by side concept (stacked for clean print) ---
+    section_label("Objective")
+    section_body(breakdown.get('character_objective', ''), 'B', 11, 6)
+    pdf.ln(4)
+
+    section_label("Stakes")
+    section_body(breakdown.get('stakes', ''), '', 11, 6)
+    pdf.ln(4)
+    divider()
+
+    # --- Beats ---
+    section_label("Beat Breakdown")
     pdf.ln(2)
-    tips = breakdown.get('self_tape_tips', {})
-    for label, key in [("Framing", "framing"), ("Eyeline", "eyeline"), ("Tone & Energy", "tone_energy")]:
-        write_heading(label, 11)
-        write_text(tips.get(key, ''), font_size=10, line_height=5)
-        pdf.ln(2)
+    for beat in breakdown.get('beats', []):
+        # Beat header
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font('Helvetica', 'B', 10)
+        beat_num = beat.get('beat_number', '')
+        beat_title = beat.get('title', '')
+        emotion = beat.get('emotion', '')
+        pdf.multi_cell(w, 5, safe(f"{beat_num}. {beat_title}  [{emotion}]"))
+
+        # Description
+        desc = beat.get('description', '')
+        if desc:
+            pdf.set_x(pdf.l_margin + 4)
+            pdf.set_font('Helvetica', '', 9)
+            pdf.multi_cell(w - 4, 5, safe(desc))
+
+        # Subtext — the key part
+        subtext = beat.get('subtext', '')
+        if subtext:
+            pdf.set_x(pdf.l_margin + 4)
+            pdf.set_font('Helvetica', 'I', 9)
+            pdf.set_text_color(80, 80, 80)
+            pdf.multi_cell(w - 4, 5, safe(f'"{subtext}"'))
+            pdf.set_text_color(0, 0, 0)
+
+        pdf.ln(3)
+
+    divider()
+
+    # --- Three Takes ---
+    section_label("Your Takes")
+    pdf.ln(2)
+    takes = breakdown.get('acting_takes', {})
+    for label, key in [("Grounded", "grounded"), ("Bold", "bold"), ("Wildcard", "wildcard")]:
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font('Helvetica', 'B', 10)
+        pdf.cell(w, 5, safe(label.upper()), 0, 1)
+        pdf.set_x(pdf.l_margin)
+        pdf.set_font('Helvetica', '', 9)
+        pdf.multi_cell(w, 5, safe(takes.get(key, '')))
+        pdf.ln(3)
+
+    # --- Footer ---
+    pdf.ln(4)
+    pdf.set_font('Helvetica', '', 7)
+    pdf.set_text_color(150, 150, 150)
+    pdf.set_x(pdf.l_margin)
+    pdf.cell(w, 4, safe(f"Generated by Actor's Companion  |  {breakdown.get('created_at', '')[:10]}"), 0, 1, 'C')
 
     pdf_bytes = pdf.output()
-    char_name = safe(breakdown.get('character_name', 'breakdown')).replace(' ', '_')
+    filename = safe(char_name).replace(' ', '_').lower()
     return StreamingResponse(
         io.BytesIO(pdf_bytes),
         media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename={char_name}_breakdown.pdf"}
+        headers={"Content-Disposition": f"attachment; filename={filename}_breakdown.pdf"}
     )
 
 

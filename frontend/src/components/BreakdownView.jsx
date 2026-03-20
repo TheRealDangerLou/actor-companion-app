@@ -31,6 +31,7 @@ import {
   Share2,
   Mic,
   ExternalLink,
+  Printer,
 } from "lucide-react";
 
 const container = {
@@ -163,7 +164,21 @@ export default function BreakdownView({
                     <Download className="w-4 h-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent>Export PDF</TooltipContent>
+                <TooltipContent>Download PDF</TooltipContent>
+              </Tooltip>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    data-testid="print-button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => window.print()}
+                    className="text-zinc-400 hover:text-amber-500"
+                  >
+                    <Printer className="w-4 h-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Print Breakdown</TooltipContent>
               </Tooltip>
               <Button
                 data-testid="regenerate-takes-button"
