@@ -7,53 +7,60 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Frontend**: React + Tailwind + shadcn/ui + framer-motion
 - **Backend**: FastAPI + MongoDB
 - **AI**: GPT-5.2 via Emergent LLM Key (text analysis + image vision/OCR)
-- **TTS**: ElevenLabs (integration built, live with paid key)
-
-## User Persona
-Actors preparing for auditions who need fast, actionable breakdowns they can perform immediately. Primary use: mobile (iPhone), often while self-taping.
+- **TTS**: ElevenLabs (live with paid key)
 
 ## What's Implemented (March 2026)
 
-### Core Analysis Pipeline (Stabilized)
-- Text analysis via GPT-5.2 with stage-by-stage tracking
-- Image analysis via GPT-5.2 Vision (HEIC, JPEG, PNG, WebP supported)
-- PDF text extraction via PyPDF2 with vision fallback for scanned PDFs
-- Input truncation to ~2500 chars (1-2 pages) for reliable GPT responses
+### Quick / Deep Analysis Modes
+- **Quick Mode** (~15-25s): Fast, surface-level prep. Simple beat subtext, basic acting direction. Default mode.
+- **Deep Mode** (~30-60s): Full scene study. Includes:
+  - Emotional Arc (character's journey from first line to last)
+  - What They Hide (what truth the character is protecting)
+  - Layered subtext per beat (surface / meaning / fear)
+  - Physical life per beat (specific body direction)
+  - More granular, playable acting takes with line-specific direction
+- Mode toggle on upload page (Quick | Deep buttons)
+- Different loading screens per mode with appropriate messaging
+- DEEP badge in breakdown header when viewing deep analysis
+- Deep-only cards (Emotional Arc, What They Hide) in BreakdownView
+- Mode stored in DB with each breakdown
+
+### Stabilized Analysis Pipeline
+- Stage-by-stage debug tracking on every response (`_debug` object)
 - Fallback mode: returns extracted text + partial breakdown instead of hard failure
-- Detailed _debug object on every response (stages, fallback boolean, error reasons)
-- `/api/debug/pipeline` diagnostic endpoint for stage-by-stage health checks
-- HEIC-to-JPEG conversion via pillow-heif
-- Image compression/resize (max 2048px) before Vision API
+- `/api/debug/pipeline` diagnostic endpoint
+- Input truncation: Quick=2500 chars, Deep=8000 chars
+- Detailed error messages surfaced to frontend
+
+### File Upload (Hardened)
+- HEIC→JPEG conversion, image resize (max 2048px)
 - iOS edge case handling (empty MIME types, application/octet-stream)
+- Smart file type detection (magic bytes + Pillow fallback)
+- PDF text extraction with vision fallback for scanned PDFs
 
 ### Breakdown Features
 - Scene Summary, Character Objective, Stakes
 - Beat Breakdown with subtext + keyword highlights
-- 3 Distinct Acting Takes (grounded/bold/wildcard)
+- 3 Acting Takes (grounded/bold/wildcard)
 - Regenerate Takes button
 - Reader Mode (chunked lines + cue-based recall)
-- Teleprompter Mode (full-screen, large text, tap zones)
+- Teleprompter Mode
 - Scene Reader with ElevenLabs voice playback
 - Share Breakdown (read-only URL)
 - PDF Export + Browser Print
-- Recent Breakdowns History on upload page
+- Recent Breakdowns History
 
 ### UI/UX
 - Dark "Black Box Theater" aesthetic
-- Mobile-first design (wake lock, swipe nav, safe area insets)
-- Camera "Snap" feature for mobile uploads
-- File size display after selection
-- Detailed error toasts (not generic "Analysis failed")
-- Fallback banner in BreakdownView with expandable pipeline stages
-- Console logging of _debug stages for debugging
+- Mobile-first (wake lock, swipe nav, safe area insets)
+- Camera "Snap" for mobile uploads
 
 ## Prioritized Backlog
-### P0 (User testing next)
-- [ ] User real-world testing on iPhone (all upload paths: text, PDF, image, snap)
-- [ ] Monitor fallback rate — if high, investigate LLM budget/quota
+### P0
+- [ ] User real-world testing on iPhone (Quick + Deep modes, all upload paths)
 
 ### P1
-- [ ] Voice selection for Scene Reader (blocked on ElevenLabs voices_read permission)
+- [ ] Voice selection for Scene Reader
 - [ ] AI Scene Reader Phase 2 (tone/pacing control)
 
 ### P2
@@ -61,4 +68,3 @@ Actors preparing for auditions who need fast, actionable breakdowns they can per
 - [ ] Audition Tracker
 - [ ] Casting Director POV layer
 - [ ] User accounts & auth
-- [ ] Saved breakdowns dashboard
