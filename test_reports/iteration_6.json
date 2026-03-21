@@ -1,0 +1,65 @@
+{
+  "summary": "Comprehensive testing of Actor's Companion new features: Guided Upload Flow (3-step stepper) and Memorization Mode Overhaul (3 tabs). All features working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Frontend: Step 1 shows 'Paste script' button (data-testid='input-type-text')",
+    "Frontend: Step 1 shows 'Upload file' button (data-testid='input-type-file')",
+    "Frontend: Clicking 'Paste script' advances to Step 2 with textarea",
+    "Frontend: Clicking 'Upload file' advances to Step 2 with file upload zone",
+    "Frontend: Step 2 shows Quick/Deep mode toggle (data-testid='mode-toggle')",
+    "Frontend: Step 2 shows 'Continue' button when text is entered (data-testid='step-next-2')",
+    "Frontend: Step 2 'Back' button returns to Step 1 (data-testid='step-back-2')",
+    "Frontend: Step 3 shows summary bar with line count and mode badge",
+    "Frontend: Step 3 shows expandable 'Add context' section with all fields",
+    "Frontend: Step 3 'Deep Analysis' button text for deep mode, 'Analyze My Sides' for quick mode",
+    "Frontend: Step 3 'Back' button returns to Step 2 (data-testid='step-back-3')",
+    "Frontend: Full flow - paste text -> select mode -> continue -> analyze -> breakdown shows",
+    "Frontend: Recent breakdowns only show on Step 1 (hidden on Steps 2 and 3)",
+    "Frontend: Memorization mode has three tabs: 'Line Run', 'Reader', 'Cue & Recall'",
+    "Frontend: Line Run is the default tab when memorization opens",
+    "Frontend: Line Run shows cue text ('They say:') and 'Tap to reveal your line' button",
+    "Frontend: Line Run shows 'Nailed it' and 'Peeked' buttons after reveal",
+    "Frontend: Line Run tracks progress (nailed/peeked counters visible in progress bar)",
+    "Frontend: Line Run shows 'Run Complete' screen with Nailed/Peeked counts",
+    "Frontend: Line Run 'Run Again' button resets the drill",
+    "Frontend: Reader tab shows chunk navigation (prev/next buttons)",
+    "Frontend: Reader tab shows chunk text with reveal/hide toggle",
+    "Frontend: Cue & Recall tab shows cue-recall pairs with tap-to-reveal",
+    "Backend: GET /api/ returns 200 - API health check",
+    "Backend: POST /api/analyze/text with mode=quick returns 200 with memorization data",
+    "Backend: POST /api/analyze/text with mode=deep returns 200 with memorization data",
+    "Backend: GET /api/breakdowns returns list of breakdowns",
+    "Backend: GET /api/breakdowns/{id} returns breakdown with memorization.cue_recall array",
+    "Backend: Memorization cue_recall has correct format (cue/your_line pairs)",
+    "Backend: Memorization chunked_lines has correct format for Reader tab",
+    "Backend: GET /api/tts/status returns available status"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_guided_upload_memorization.py",
+    "/app/test_reports/pytest/guided_upload_memorization_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Minor: BreakdownView uses data-testid='memorization-button' but earlier tests expected 'open-memorization-button' - consider standardizing naming convention"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_guided_upload_memorization.py"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "seed_data_creation": "None - used existing breakdowns and created new ones via API",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Guided Upload Flow and Memorization Mode Overhaul fully tested. Key data-testids: input-type-text, input-type-file, script-textarea, mode-toggle, mode-quick, mode-deep, step-next-2, step-back-2, step-back-3, toggle-context-button, analyze-button, memorization-button, memorization-overlay, memorization-linerun-tab, memorization-reader-tab, memorization-cue-tab, reveal-line-button, mark-nailed, mark-peeked, run-again-button. Test file at /app/backend/tests/test_guided_upload_memorization.py can be reused for regression testing.",
+  "rca_of_the_issue": "N/A - No bugs found. All Guided Upload Flow and Memorization Mode features working correctly."
+}
