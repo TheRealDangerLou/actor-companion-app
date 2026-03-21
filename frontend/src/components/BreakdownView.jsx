@@ -311,7 +311,7 @@ export default function BreakdownView({
               <CardHeader className="pb-3">
                 <CardTitle className="flex items-center gap-2 text-sm uppercase tracking-widest text-amber-500/80">
                   <TrendingUp className="w-4 h-4" />
-                  Emotional Arc
+                  Tactical Arc
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -371,8 +371,8 @@ export default function BreakdownView({
                         <span className="font-semibold text-zinc-200">
                           {beat.title}
                         </span>
-                        <Badge className="bg-zinc-800 text-zinc-400 border-0 text-xs hidden sm:inline-flex">
-                          {beat.emotion}
+                        <Badge className="bg-zinc-800 text-zinc-400 border-0 text-xs hidden sm:inline-flex max-w-[200px] truncate">
+                          {beat.behavior || beat.emotion || ""}
                         </Badge>
                       </div>
                     </AccordionTrigger>
@@ -383,6 +383,23 @@ export default function BreakdownView({
                           beat.key_words
                         )}
                       </p>
+                      {/* Behavior + Effect (v3 prompts) */}
+                      {(beat.behavior || beat.effect) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                          {beat.behavior && (
+                            <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-amber-500/40">
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">What they do</p>
+                              <p className="text-sm text-zinc-300 leading-relaxed">{beat.behavior}</p>
+                            </div>
+                          )}
+                          {beat.effect && (
+                            <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-zinc-500/40">
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">How it lands</p>
+                              <p className="text-sm text-zinc-400 leading-relaxed">{beat.effect}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {/* Layered subtext (Deep) vs single subtext (Quick) */}
                       {beat.subtext_surface || beat.subtext_meaning || beat.subtext_fear ? (
                         <div className="space-y-2">
@@ -394,13 +411,13 @@ export default function BreakdownView({
                           )}
                           {beat.subtext_meaning && (
                             <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-amber-500/40">
-                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">What they mean</p>
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">What it does</p>
                               <p className="text-sm text-zinc-300 italic leading-relaxed font-script">"{beat.subtext_meaning}"</p>
                             </div>
                           )}
                           {beat.subtext_fear && (
                             <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-rose-500/40">
-                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">What they fear</p>
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">If this fails</p>
                               <p className="text-sm text-zinc-300 italic leading-relaxed font-script">"{beat.subtext_fear}"</p>
                             </div>
                           )}
@@ -408,7 +425,7 @@ export default function BreakdownView({
                       ) : beat.subtext ? (
                         <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-amber-500/40">
                           <p className="text-xs uppercase tracking-wider text-zinc-500 mb-1">
-                            Subtext (inner voice)
+                            Subtext
                           </p>
                           <p className="text-sm text-zinc-300 italic leading-relaxed font-script">
                             "{beat.subtext}"

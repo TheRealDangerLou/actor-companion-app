@@ -115,6 +115,7 @@ RULES — read these before every response:
 5. Beats track TACTIC SHIFTS — when the character changes what they're doing, not what they're talking about.
 6. Subtext = what the line is doing tactically, not a therapy session about what they "really feel."
 7. Acting takes must describe specific physical choices and line deliveries an actor can execute in 10 seconds.
+8. NO emotional labels as descriptors. Not "cool contempt" or "authoritative satisfaction." Instead describe the BEHAVIOR: "dismisses her point without addressing it" or "reframes the situation to put himself in charge." Verbs, not adjectives.
 
 You MUST respond with valid JSON only. No markdown.
 
@@ -128,7 +129,8 @@ You MUST respond with valid JSON only. No markdown.
       "beat_number": 1,
       "title": "Short title — name the tactic shift",
       "description": "What tactic is the character using HERE? What changed from the previous beat? Be specific about what they're DOING.",
-      "emotion": "The energy driving this tactic — not a feeling label, but the fuel. e.g. 'cold control' or 'calculated escalation'",
+      "behavior": "What the character is DOING in this beat — described as an action, not a feeling. e.g. 'Dismisses her explanation to stop her from building a case' or 'Cuts off her exit to maintain control of the conversation.'",
+      "effect": "How this lands on the other person. What does it do to them? e.g. 'Forces her to defend instead of attack' or 'Takes away her option to leave.'",
       "subtext": "What this line/section is doing tactically. Not what they secretly feel — what the words are engineered to accomplish.",
       "key_words": ["word1", "word2"]
     }
@@ -169,6 +171,7 @@ RULES — apply these to every field:
 4. Subtext describes what the line DOES, not what the character "really feels." A cruel line's subtext is what it's designed to accomplish — not hidden guilt.
 5. Physical direction must be specific and executable. "Jaw tight, words clipped, weight forward" — not "a flicker of vulnerability."
 6. If casting notes or context are provided, integrate them as constraints on your analysis — they tell you what the production wants, which should shape every choice.
+7. NO emotional labels as descriptors. Not "cool contempt," "authoritative satisfaction," or "possessive command." Instead describe the BEHAVIOR: "dismisses her point without acknowledging it" or "physically blocks her exit." Use verbs that describe what the character DOES and how it LANDS on the other person.
 
 You MUST respond with valid JSON only. No markdown.
 
@@ -177,14 +180,15 @@ You MUST respond with valid JSON only. No markdown.
   "character_name": "Name of the character the actor is reading for",
   "character_objective": "Active verb phrase: what are they doing TO the other person through the entire scene? e.g. 'To dismantle Sarah's position until she has no ground left.' Must be provable from the dialogue.",
   "stakes": "What happens if they fail? Based on what's observable in the text — not inferred emotional consequences.",
-  "emotional_arc": "Track what the character is DOING from first line to last. Not what they feel — what tactics they deploy, how those tactics escalate or shift, and what changes by the end. If they start controlled and end aggressive, say that. Don't add hidden softness.",
+  "emotional_arc": "Track what the character is DOING from first line to last. Not what they feel — what tactics they deploy, how those tactics escalate or shift, and what changes by the end. Describe in behavioral terms: 'starts by dismissing, escalates to reframing, ends by physically restraining.' No feeling words.",
   "what_they_hide": "What is the character actively working to keep OFF the table? This must be supported by the text — something they avoid saying, redirect away from, or refuse to acknowledge. If nothing is hidden, say 'Nothing — this character operates in the open.' Do NOT default to guilt/shame.",
   "beats": [
     {
       "beat_number": 1,
       "title": "Name the tactic, not the topic",
       "description": "What tactic is the character deploying? What changed from the previous beat? Be precise about the BEFORE and AFTER of this shift.",
-      "emotion": "The fuel driving this tactic. Specific shade, not a label. e.g. 'calculated cruelty dressed as reason' — not 'anger.'",
+      "behavior": "What the character is DOING in this beat — as an action verb. e.g. 'Dismisses her framing to deny her agency' or 'Grabs her arm to physically stop her from leaving.' NOT feeling labels like 'contempt' or 'frustration.'",
+      "effect": "How this lands on the other person. What position does it put them in? e.g. 'Forces her onto the defensive' or 'Removes her ability to walk away.' Describe the tactical result.",
       "subtext_surface": "What the line appears to be saying.",
       "subtext_meaning": "What the line is tactically designed to DO to the other person.",
       "subtext_fear": "What happens if this tactic fails? What's the character trying to prevent? Must be text-supported. If nothing, say 'N/A.'",
