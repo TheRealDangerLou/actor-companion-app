@@ -365,9 +365,16 @@ async def debug_pipeline():
     # 6. PDF support
     try:
         from PyPDF2 import PdfReader
-        results["pdf_support"] = {"ok": True}
+        results["pdf_text_support"] = {"ok": True}
     except ImportError:
-        results["pdf_support"] = {"ok": False, "error": "PyPDF2 not installed"}
+        results["pdf_text_support"] = {"ok": False, "error": "PyPDF2 not installed"}
+
+    # 7. PDF-to-image (scanned PDF) support
+    try:
+        import pymupdf
+        results["pdf_image_support"] = {"ok": True, "pymupdf_version": pymupdf.version[0]}
+    except ImportError:
+        results["pdf_image_support"] = {"ok": False, "error": "pymupdf not installed"}
 
     all_ok = all(r.get("ok") for r in results.values())
     return {"all_ok": all_ok, "stages": results}
@@ -467,6 +474,39 @@ def prepare_image_for_vision(raw_bytes: bytes, filename: str = "") -> bytes:
     return buf.getvalue()
 
 
+def pdf_pages_to_images(pdf_bytes: bytes, max_pages: int = 3, dpi: int = 200) -> list[bytes]:
+    """Render PDF pages to JPEG images using pymupdf.
+    Returns a list of JPEG byte strings (one per page, up to max_pages)."""
+    import pymupdf
+    jpeg_list = []
+    try:
+        doc = pymupdf.open(stream=pdf_bytes, filetype="pdf")
+        page_count = min(len(doc), max_pages)
+        logger.info(f"[pdf_to_images] Rendering {page_count}/{len(doc)} pages at {dpi}dpi")
+        for i in range(page_count):
+            page = doc[i]
+            # Render at specified DPI
+            zoom = dpi / 72
+            mat = pymupdf.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+            img = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            # Resize if too large
+            max_dim = 2048
+            if max(img.size) > max_dim:
+                img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85, optimize=True)
+            jpeg_list.append(buf.getvalue())
+            logger.info(f"[pdf_to_images] Page {i+1}: {len(jpeg_list[-1])/1024:.0f}KB")
+        doc.close()
+    except Exception as e:
+        logger.error(f"[pdf_to_images] pymupdf render failed: {e}")
+        raise ValueError(f"PDF rendering failed: {e}")
+    if not jpeg_list:
+        raise ValueError("PDF had no renderable pages")
+    return jpeg_list
+
+
 def detect_file_type(content_type: str, filename: str, raw_bytes: bytes) -> str:
     """Determine if a file is 'pdf', 'image', or 'unknown'.
     Handles iOS edge cases where content_type is empty or generic."""
@@ -553,15 +593,18 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
             return _fallback_response(None, stages, f"PDF read failed: {e}")
 
         if len(extracted_text) < 10:
-            stages.append({"stage": "pdf_text_check", "ok": False, "error": "Too little text extracted, trying vision"})
-            logger.info("[analyze/image] PDF text too short, falling back to vision OCR")
+            stages.append({"stage": "pdf_text_check", "ok": False, "error": "Too little text extracted, converting pages to images"})
+            logger.info("[analyze/image] PDF text too short, rendering pages as images for vision OCR")
             try:
-                jpeg_bytes = prepare_image_for_vision(contents, file.filename)
+                page_images = pdf_pages_to_images(contents, max_pages=3, dpi=200)
+                stages.append({"stage": "pdf_to_images", "ok": True, "pages_rendered": len(page_images), "total_kb": round(sum(len(p) for p in page_images) / 1024, 1)})
+                # Use the first page for vision analysis
+                jpeg_bytes = page_images[0]
                 file_type = "image"
                 contents = jpeg_bytes
             except ValueError as e:
-                stages.append({"stage": "pdf_to_image", "ok": False, "error": str(e)})
-                return _fallback_response(None, stages, f"PDF had no readable text and couldn't be converted to image: {e}")
+                stages.append({"stage": "pdf_to_images", "ok": False, "error": str(e)})
+                return _fallback_response(None, stages, f"Scanned PDF could not be converted to images: {e}")
         else:
             # Text extraction worked — send to GPT
             full_text = context_prefix + extracted_text if context_prefix else extracted_text
