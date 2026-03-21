@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
   X, Eye, EyeOff, ChevronRight, ChevronLeft, BookOpen,
-  Maximize2, Minimize2, Zap, Check, RotateCcw
+  Maximize2, Minimize2, Zap, Check, RotateCcw, Repeat
 } from "lucide-react";
 
 function useWakeLock() {
@@ -24,7 +24,7 @@ function useWakeLock() {
 }
 
 export default function MemorizationMode({ memorization, characterName, onClose }) {
-  const [tab, setTab] = useState("linerun");
+  const [tab, setTab] = useState("mylines");
   const [currentChunk, setCurrentChunk] = useState(0);
   const [chunkRevealed, setChunkRevealed] = useState(true);
   const [teleprompterMode, setTeleprompterMode] = useState(false);
@@ -37,6 +37,11 @@ export default function MemorizationMode({ memorization, characterName, onClose 
 
   // Cue Recall state
   const [revealedCues, setRevealedCues] = useState(new Set());
+
+  // My Lines state
+  const [myLineIndex, setMyLineIndex] = useState(0);
+  const [myLineCueShown, setMyLineCueShown] = useState(false);
+  const myLineTouchRef = useRef(null);
 
   useWakeLock();
 
@@ -97,6 +102,7 @@ export default function MemorizationMode({ memorization, characterName, onClose 
   };
 
   const tabItems = [
+    { value: "mylines", label: "My Lines", icon: Repeat },
     { value: "linerun", label: "Line Run", icon: Zap },
     { value: "reader", label: "Reader", icon: BookOpen },
     { value: "cue", label: "Cue & Recall", icon: Eye },
@@ -147,19 +153,19 @@ export default function MemorizationMode({ memorization, characterName, onClose 
 
       {/* Tab bar */}
       {!teleprompterMode && (
-        <div className="flex px-4 pt-3 gap-1 shrink-0">
+        <div className="flex px-4 pt-3 gap-1 shrink-0 overflow-x-auto scrollbar-none">
           {tabItems.map(({ value, label, icon: Icon }) => (
             <button
               key={value}
               data-testid={`memorization-${value}-tab`}
               onClick={() => setTab(value)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-medium transition-all ${
+              className={`shrink-0 flex items-center justify-center gap-1 py-2 px-3 rounded-md text-[11px] font-medium transition-all ${
                 tab === value
                   ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
                   : "text-zinc-500 hover:text-zinc-400 border border-transparent"
               }`}
             >
-              <Icon className="w-3.5 h-3.5" />
+              <Icon className="w-3 h-3" />
               {label}
             </button>
           ))}
@@ -182,6 +188,86 @@ export default function MemorizationMode({ memorization, characterName, onClose 
         onTouchStart={tab === "reader" ? handleTouchStart : undefined}
         onTouchEnd={tab === "reader" ? handleTouchEnd : undefined}
       >
+        {/* ===== MY LINES — speed drill ===== */}
+        {tab === "mylines" && (
+          <div className="max-w-xl mx-auto flex flex-col h-full">
+            {totalCues === 0 ? (
+              <div className="flex-1 flex items-center justify-center">
+                <p className="text-sm text-zinc-500 text-center">No lines available for this breakdown.</p>
+              </div>
+            ) : (
+              <div
+                className="flex-1 flex flex-col justify-center select-none"
+                onClick={() => {
+                  // Tap anywhere to advance
+                  if (myLineIndex < totalCues - 1) {
+                    setMyLineIndex(i => i + 1);
+                    setMyLineCueShown(false);
+                  } else {
+                    setMyLineIndex(0);
+                    setMyLineCueShown(false);
+                  }
+                }}
+              >
+                {/* Progress bar */}
+                <div className="flex items-center gap-2 mb-8 pointer-events-none">
+                  <span className="text-xs text-zinc-600 tabular-nums">{myLineIndex + 1}/{totalCues}</span>
+                  <div className="flex-1 h-0.5 bg-zinc-900 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-amber-500 rounded-full transition-all duration-200"
+                      style={{ width: `${((myLineIndex + 1) / totalCues) * 100}%` }}
+                    />
+                  </div>
+                </div>
+
+                {/* The line */}
+                <AnimatePresence mode="wait">
+                  <motion.div
+                    key={myLineIndex}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -16 }}
+                    transition={{ duration: 0.15 }}
+                    className="flex-1 flex flex-col justify-center"
+                  >
+                    <p
+                      className="text-2xl sm:text-3xl text-zinc-100 font-script leading-relaxed text-center"
+                      data-testid="my-line-text"
+                    >
+                      {cue_recall[myLineIndex]?.your_line}
+                    </p>
+
+                    {/* Cue peek */}
+                    {myLineCueShown ? (
+                      <motion.p
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        className="text-sm text-zinc-600 text-center mt-6 font-script italic"
+                        data-testid="my-line-cue-text"
+                      >
+                        {cue_recall[myLineIndex]?.cue}
+                      </motion.p>
+                    ) : (
+                      <button
+                        data-testid="show-cue-button"
+                        onClick={(e) => { e.stopPropagation(); setMyLineCueShown(true); }}
+                        className="text-xs text-zinc-700 hover:text-zinc-500 text-center mt-6 transition-colors"
+                      >
+                        show cue
+                      </button>
+                    )}
+                  </motion.div>
+                </AnimatePresence>
+
+                {/* Hint */}
+                <p className="text-[10px] text-zinc-800 text-center mt-8 pointer-events-none">
+                  {myLineIndex < totalCues - 1 ? "tap anywhere for next line" : "tap to restart"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ===== LINE RUN ===== */}
         {tab === "linerun" && (
           <div className="max-w-xl mx-auto flex flex-col h-full">
