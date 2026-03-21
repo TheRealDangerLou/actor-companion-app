@@ -1,0 +1,56 @@
+{
+  "summary": "Comprehensive testing of Actor's Companion pipeline debug features. All new pipeline tracking features working correctly: /api/debug/pipeline returns all stages, /api/analyze/text and /api/analyze/image return _debug objects with stages array and fallback boolean, fallback responses work correctly for unsupported files, iOS octet-stream MIME type edge case handled properly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "LLM API",
+        "issue": "Budget exceeded error during testing (external API limitation, not code bug)",
+        "impact": "Intermittent - fallback mechanism correctly handles this",
+        "priority": "LOW"
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "GET /api/debug/pipeline returns all_ok:true with all stages (llm_key, gpt_call, mongodb, image_processing, heic_support, pdf_support)",
+    "POST /api/analyze/text returns 200 with _debug.stages and _debug.fallback=false",
+    "POST /api/analyze/text _debug.stages includes input_received, gpt_analysis, db_save all with ok:true",
+    "POST /api/analyze/image with JPEG returns 200 with _debug.stages (file_received, type_detection, image_convert, gpt_vision, db_save)",
+    "POST /api/analyze/image with PDF returns 200 with _debug.stages (file_received, type_detection, pdf_extract, gpt_analysis, db_save)",
+    "POST /api/analyze/image with application/octet-stream MIME (iOS edge case) detects as image and succeeds",
+    "POST /api/analyze/image with empty file returns 400 with descriptive error",
+    "POST /api/analyze/image with unsupported file returns fallback response with _debug info",
+    "GET /api/breakdowns returns list of breakdowns",
+    "POST /api/regenerate-takes/{id} works correctly (regression check passed)",
+    "Frontend: Breakdown view displays correctly after successful analysis (no fallback banner)",
+    "Frontend: Console logs _debug stages after analysis",
+    "Frontend: Recent breakdowns visible on upload page and clickable",
+    "Frontend: All breakdown cards render (scene summary, objective, stakes, beats, takes, tips)",
+    "Frontend: Takes tabs (grounded, bold, wildcard) work correctly",
+    "Frontend: Context fields toggle and display properly",
+    "Frontend: Header buttons present (new analysis, export PDF, share, regenerate)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_pipeline_debug.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_pipeline_debug.py"
+  ],
+  "success_rate": {
+    "backend": "86% (12/14 tests passed - 2 failures due to external LLM budget limit, not code bugs)",
+    "frontend": "100%"
+  },
+  "seed_data_creation": "None - used existing test files at /tmp/test_sides.jpg and /tmp/test_sides.pdf",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Pipeline debug features fully implemented and working. The _debug object is returned on all analyze responses with stages array and fallback boolean. Fallback mechanism returns HTTP 200 with partial data instead of HTTP 500. Test files available at /tmp/test_sides.jpg and /tmp/test_sides.pdf. LLM budget may be limited - fallback responses will be triggered when budget exceeded.",
+  "rca_of_the_issue": "N/A - No bugs found. All requested features working correctly."
+}

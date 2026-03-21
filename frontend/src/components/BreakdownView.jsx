@@ -79,13 +79,31 @@ export default function BreakdownView({
     beats = [],
     acting_takes = {},
     self_tape_tips = {},
+    _debug,
   } = breakdown;
+
+  const isFallback = _debug?.fallback;
 
   return (
     <div
       data-testid="breakdown-view"
       className="min-h-screen bg-[#09090b] pb-16"
     >
+      {/* Debug/Fallback Banner */}
+      {isFallback && (
+        <div data-testid="fallback-banner" className="bg-amber-900/30 border-b border-amber-700/50 px-4 py-3">
+          <div className="max-w-5xl mx-auto">
+            <p className="text-amber-400 text-sm font-medium">Analysis incomplete — partial results shown</p>
+            <p className="text-amber-500/70 text-xs mt-1">{_debug?.reason}</p>
+            <details className="mt-2">
+              <summary className="text-xs text-amber-600 cursor-pointer hover:text-amber-400">Pipeline stages</summary>
+              <pre className="text-xs text-amber-700 mt-1 whitespace-pre-wrap font-mono">
+                {JSON.stringify(_debug?.stages, null, 2)}
+              </pre>
+            </details>
+          </div>
+        </div>
+      )}
       {/* Header */}
       <header className="sticky top-0 z-40 bg-[#09090b]/90 backdrop-blur-md border-b border-zinc-900">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">

@@ -20,31 +20,71 @@ function MainApp() {
   const [memorizationOpen, setMemorizationOpen] = useState(false);
   const [sceneReaderOpen, setSceneReaderOpen] = useState(false);
   const [ttsAvailable, setTtsAvailable] = useState(false);
+  const [recentBreakdowns, setRecentBreakdowns] = useState([]);
 
   useEffect(() => {
     axios.get(`${API}/tts/status`).then(r => setTtsAvailable(r.data.available)).catch(() => {});
+    axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
   }, []);
 
   const handleAnalyze = useCallback(async (data) => {
     setLoading(true);
     try {
       let response;
+      const timeout = 120000;
       if (data.type === "text") {
-        response = await axios.post(`${API}/analyze/text`, { text: data.text });
+        response = await axios.post(`${API}/analyze/text`, { text: data.text }, { timeout });
       } else {
         const formData = new FormData();
         formData.append("file", data.file);
         if (data.context) {
           formData.append("context", data.context);
         }
-        response = await axios.post(`${API}/analyze/image`, formData);
+        response = await axios.post(`${API}/analyze/image`, formData, {
+          timeout,
+          headers: { "Content-Type": "multipart/form-data" },
+        });
       }
-      setBreakdown(response.data);
+      const result = response.data;
+
+      // Check if this is a fallback/partial response
+      if (result._debug?.fallback) {
+        const reason = result._debug?.reason || "Unknown error";
+        const stageInfo = (result._debug?.stages || [])
+          .filter(s => !s.ok)
+          .map(s => `${s.stage}: ${s.error}`)
+          .join(" | ");
+        toast.error(`Analysis incomplete: ${stageInfo || reason}`, { duration: 10000 });
+      } else {
+        toast.success("Breakdown ready. Time to work.");
+      }
+
+      // Show debug stages in console for troubleshooting
+      if (result._debug) {
+        console.log("[Actor's Companion] Pipeline debug:", JSON.stringify(result._debug, null, 2));
+      }
+
+      setBreakdown(result);
       setView("breakdown");
-      toast.success("Breakdown ready. Time to work.");
+      // Refresh recent list
+      axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
     } catch (error) {
-      const msg = error.response?.data?.detail || "Analysis failed. Try again.";
-      toast.error(msg);
+      let msg;
+      if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
+        msg = "Request timed out. Try a smaller file or paste the text directly.";
+      } else if (!error.response) {
+        msg = `Network error — check your connection. (${error.message || "no response"})`;
+      } else if (error.response.status === 413) {
+        msg = "File too large for upload. Try a smaller image or paste the text.";
+      } else {
+        msg = error.response?.data?.detail || `Server error (${error.response.status})`;
+      }
+      toast.error(msg, { duration: 8000 });
+      console.error("[Actor's Companion] Analysis error:", {
+        status: error.response?.status,
+        detail: error.response?.data?.detail,
+        message: error.message,
+      });
     }
     setLoading(false);
   }, []);
@@ -81,6 +121,18 @@ function MainApp() {
     setBreakdown(null);
   }, []);
 
+  const handleLoadBreakdown = useCallback(async (id) => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`${API}/breakdowns/${id}`);
+      setBreakdown(response.data);
+      setView("breakdown");
+    } catch {
+      toast.error("Could not load this breakdown.");
+    }
+    setLoading(false);
+  }, []);
+
   return (
     <>
       <AnimatePresence mode="wait">
@@ -91,7 +143,7 @@ function MainApp() {
         )}
         {!loading && view === "upload" && (
           <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-            <UploadPage onAnalyze={handleAnalyze} />
+            <UploadPage onAnalyze={handleAnalyze} recentBreakdowns={recentBreakdowns} onLoadBreakdown={handleLoadBreakdown} />
           </motion.div>
         )}
         {!loading && view === "breakdown" && breakdown && (

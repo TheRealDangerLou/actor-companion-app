@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Upload, FileText, Image, Sparkles, ArrowRight, Camera, ChevronDown, ChevronUp, Info } from "lucide-react";
+import { Upload, FileText, Image, Sparkles, ArrowRight, Camera, ChevronDown, ChevronUp, Info, Clock } from "lucide-react";
 
 const HERO_BG = "https://images.unsplash.com/photo-1761229660731-891484da5c35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHw0fHx0aGVhdGVyJTIwc3RhZ2UlMjBzcG90bGlnaHQlMjBkYXJrfGVufDB8fHx8MTc3Mzg4ODc2Mnww&ixlib=rb-4.1.0&q=85&w=1920";
 
@@ -19,7 +19,7 @@ function getFileCategory(file) {
   return null;
 }
 
-export default function UploadPage({ onAnalyze }) {
+export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdown }) {
   const [tab, setTab] = useState("text");
   const [scriptText, setScriptText] = useState("");
   const [imageFile, setImageFile] = useState(null);
@@ -221,7 +221,7 @@ export default function UploadPage({ onAnalyze }) {
                   <div className="flex flex-col items-center gap-2 p-4">
                     <FileText className="w-10 h-10 text-amber-500/60" />
                     <p className="text-sm text-zinc-300 font-medium truncate max-w-full px-4">{imageFile.name}</p>
-                    <p className="text-xs text-zinc-500">Ready to analyze</p>
+                    <p className="text-xs text-zinc-500">{(imageFile.size / (1024 * 1024)).toFixed(1)}MB — Ready to analyze</p>
                     <button
                       onClick={clearFile}
                       className="text-xs text-zinc-500 hover:text-white underline mt-1 mobile-touch-target"
@@ -387,6 +387,45 @@ export default function UploadPage({ onAnalyze }) {
             <ArrowRight className="w-4 h-4" />
           </Button>
         </motion.div>
+
+        {/* Recent Breakdowns */}
+        {recentBreakdowns && recentBreakdowns.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.3 }}
+            className="mt-6"
+          >
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Clock className="w-3.5 h-3.5 text-zinc-600" />
+              <span className="text-xs text-zinc-600 uppercase tracking-wider font-medium">Recent</span>
+            </div>
+            <div className="space-y-2">
+              {recentBreakdowns.slice(0, 5).map((b) => (
+                <button
+                  key={b.id}
+                  data-testid={`recent-breakdown-${b.id}`}
+                  onClick={() => onLoadBreakdown(b.id)}
+                  className="w-full text-left bg-zinc-950/40 border border-zinc-800/60 rounded-lg px-4 py-3 hover:border-zinc-700 hover:bg-zinc-900/40 transition-all group"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-zinc-300 font-medium truncate group-hover:text-amber-500 transition-colors">
+                        {b.character_name || "Untitled Scene"}
+                      </p>
+                      <p className="text-xs text-zinc-600 truncate mt-0.5">
+                        {b.scene_summary ? b.scene_summary.slice(0, 80) + (b.scene_summary.length > 80 ? "..." : "") : "No summary"}
+                      </p>
+                    </div>
+                    <span className="text-[10px] text-zinc-700 shrink-0">
+                      {b.created_at ? new Date(b.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Footer hint */}
         <motion.p

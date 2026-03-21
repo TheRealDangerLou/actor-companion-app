@@ -6,6 +6,7 @@ const PHASES = [
   "Identifying beats and shifts...",
   "Crafting your takes...",
   "Building your breakdown...",
+  "Almost there — polishing your notes...",
 ];
 
 export default function LoadingScreen() {
@@ -60,7 +61,7 @@ export default function LoadingScreen() {
             className="h-full bg-amber-500 rounded-full"
             initial={{ width: "0%" }}
             animate={{ width: "100%" }}
-            transition={{ duration: 45, ease: "easeInOut" }}
+            transition={{ duration: 90, ease: "easeInOut" }}
           />
         </div>
       </div>

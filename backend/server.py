@@ -16,9 +16,18 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone
 from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from PIL import Image
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
+
+# Register HEIC/HEIF support with Pillow
+try:
+    from pillow_heif import register_heif_opener
+    register_heif_opener()
+    logging.info("HEIC/HEIF support registered")
+except ImportError:
+    logging.warning("pillow-heif not installed — HEIC uploads won't be converted")
 
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
@@ -180,37 +189,55 @@ def parse_json_response(response_text):
 
 
 async def analyze_with_gpt(text=None, image_base64=None, context=None):
+    """Core GPT call. Truncates long text to ~2000 chars. Returns (result_dict, raw_response_str)."""
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     if not api_key:
-        raise HTTPException(status_code=500, detail="LLM API key not configured")
+        raise Exception("STAGE:gpt_init | LLM API key not configured in environment")
 
-    chat = LlmChat(
-        api_key=api_key,
-        session_id=str(uuid.uuid4()),
-        system_message=ANALYSIS_SYSTEM_PROMPT
-    ).with_model("openai", "gpt-5.2")
+    # Truncate text to ~2000 chars (roughly 1-2 pages) to keep GPT reliable
+    if text and len(text) > 2500:
+        text = text[:2500] + "\n\n[...truncated for analysis — first ~2 pages used]"
+        logger.info("Truncated input text to 2500 chars")
 
-    if image_base64:
-        image_content = ImageContent(image_base64=image_base64)
-        vision_prompt = "Extract ALL text from this audition sides image, then analyze it as a script. Provide the full acting breakdown. Also include a field 'extracted_text' with the raw text you read from the image."
-        if context:
-            vision_prompt = f"{context}\n{vision_prompt}"
-        user_msg = UserMessage(
-            text=vision_prompt,
-            file_contents=[image_content]
-        )
-    else:
-        user_msg = UserMessage(
-            text=f"Analyze these audition sides and provide a full acting breakdown:\n\n{text}"
-        )
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=str(uuid.uuid4()),
+            system_message=ANALYSIS_SYSTEM_PROMPT
+        ).with_model("openai", "gpt-5.2")
+    except Exception as e:
+        raise Exception(f"STAGE:gpt_init | Failed to create LLM chat: {e}")
 
-    response = await chat.send_message(user_msg)
+    try:
+        if image_base64:
+            image_content = ImageContent(image_base64=image_base64)
+            vision_prompt = "Extract ALL text from this audition sides image, then analyze it as a script. Provide the full acting breakdown. Also include a field 'extracted_text' with the raw text you read from the image."
+            if context:
+                vision_prompt = f"{context}\n{vision_prompt}"
+            user_msg = UserMessage(
+                text=vision_prompt,
+                file_contents=[image_content]
+            )
+        else:
+            user_msg = UserMessage(
+                text=f"Analyze these audition sides and provide a full acting breakdown:\n\n{text}"
+            )
+    except Exception as e:
+        raise Exception(f"STAGE:gpt_message_build | Failed to build message: {e}")
+
+    try:
+        response = await chat.send_message(user_msg)
+    except Exception as e:
+        raise Exception(f"STAGE:gpt_call | GPT request failed: {e}")
+
+    if not response or not response.strip():
+        raise Exception("STAGE:gpt_call | GPT returned empty response")
+
     try:
         result = parse_json_response(response)
-        return result
+        return result, response
     except (ValueError, json.JSONDecodeError):
-        logger.error(f"Failed to parse GPT response: {response[:500]}")
-        raise HTTPException(status_code=500, detail="Failed to parse AI response. Please try again.")
+        raise Exception(f"STAGE:gpt_parse | Could not parse JSON from GPT response (first 300 chars): {response[:300]}")
 
 
 # --- Endpoints ---
@@ -219,14 +246,123 @@ async def root():
     return {"message": "Actor's Companion API"}
 
 
+@api_router.get("/debug/pipeline")
+async def debug_pipeline():
+    """Test each stage of the analysis pipeline independently.
+    Hit this from the browser to see exactly what's working and what isn't."""
+    results = {}
+
+    # 1. Check LLM key
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    results["llm_key"] = {"ok": bool(api_key), "value": f"{api_key[:8]}..." if api_key else "MISSING"}
+
+    # 2. Test GPT with a tiny fixed input
+    if api_key:
+        try:
+            chat = LlmChat(
+                api_key=api_key,
+                session_id="debug-test",
+                system_message="Respond with exactly: {\"test\": \"ok\"}"
+            ).with_model("openai", "gpt-5.2")
+            raw = await asyncio.wait_for(
+                chat.send_message(UserMessage(text="Say hello")),
+                timeout=30
+            )
+            results["gpt_call"] = {"ok": True, "response_length": len(raw), "first_100": raw[:100]}
+        except Exception as e:
+            results["gpt_call"] = {"ok": False, "error": str(e)}
+    else:
+        results["gpt_call"] = {"ok": False, "error": "No API key"}
+
+    # 3. Test MongoDB
+    try:
+        count = await db.breakdowns.count_documents({})
+        results["mongodb"] = {"ok": True, "breakdown_count": count}
+    except Exception as e:
+        results["mongodb"] = {"ok": False, "error": str(e)}
+
+    # 4. Test image processing
+    try:
+        from PIL import Image as PILImage
+        img = PILImage.new("RGB", (100, 100), (255, 0, 0))
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        results["image_processing"] = {"ok": True, "pillow_version": PILImage.__version__}
+    except Exception as e:
+        results["image_processing"] = {"ok": False, "error": str(e)}
+
+    # 5. HEIC support
+    try:
+        from pillow_heif import register_heif_opener
+        results["heic_support"] = {"ok": True}
+    except ImportError:
+        results["heic_support"] = {"ok": False, "error": "pillow-heif not installed"}
+
+    # 6. PDF support
+    try:
+        from PyPDF2 import PdfReader
+        results["pdf_support"] = {"ok": True}
+    except ImportError:
+        results["pdf_support"] = {"ok": False, "error": "PyPDF2 not installed"}
+
+    all_ok = all(r.get("ok") for r in results.values())
+    return {"all_ok": all_ok, "stages": results}
+
+
 @api_router.post("/analyze/text")
 async def analyze_text(request: AnalyzeTextRequest):
+    stages = []  # track what happened at each stage
+
     if not request.text.strip():
         raise HTTPException(status_code=400, detail="Text cannot be empty")
     if len(request.text.strip()) < 10:
         raise HTTPException(status_code=400, detail="Please provide at least a few lines of dialogue")
 
-    result = await analyze_with_gpt(text=request.text)
+    stages.append({"stage": "input_received", "ok": True, "chars": len(request.text)})
+    logger.info(f"[analyze/text] Input: {len(request.text)} chars")
+
+    # GPT call with timeout
+    try:
+        result, raw = await asyncio.wait_for(
+            analyze_with_gpt(text=request.text),
+            timeout=90
+        )
+        stages.append({"stage": "gpt_analysis", "ok": True})
+    except asyncio.TimeoutError:
+        stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after 90s"})
+        logger.error("[analyze/text] GPT timed out")
+        # Fallback: return the text with an error marker
+        return {
+            "id": str(uuid.uuid4()),
+            "original_text": request.text,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "scene_summary": "Analysis timed out — text captured below.",
+            "character_name": "Unknown",
+            "character_objective": "", "stakes": "",
+            "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
+            "memorization": {"chunked_lines": [], "cue_recall": []},
+            "self_tape_tips": {"framing": "", "eyeline": "", "tone_energy": ""},
+            "_debug": {"stages": stages, "fallback": True, "reason": "timeout"}
+        }
+    except Exception as e:
+        error_str = str(e)
+        stages.append({"stage": "gpt_analysis", "ok": False, "error": error_str})
+        logger.error(f"[analyze/text] GPT error: {error_str}")
+        # Fallback: return text + error detail
+        return {
+            "id": str(uuid.uuid4()),
+            "original_text": request.text,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "scene_summary": "Analysis failed — your text was saved. See error details.",
+            "character_name": "Unknown",
+            "character_objective": "", "stakes": "",
+            "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
+            "memorization": {"chunked_lines": [], "cue_recall": []},
+            "self_tape_tips": {"framing": "", "eyeline": "", "tone_energy": ""},
+            "_debug": {"stages": stages, "fallback": True, "reason": error_str}
+        }
+
+    # Save to DB
     breakdown_id = str(uuid.uuid4())
     doc = {
         "id": breakdown_id,
@@ -236,24 +372,102 @@ async def analyze_text(request: AnalyzeTextRequest):
     }
     await db.breakdowns.insert_one(doc)
     stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+    stages.append({"stage": "db_save", "ok": True})
+    stored["_debug"] = {"stages": stages, "fallback": False}
     return stored
+
+
+def prepare_image_for_vision(raw_bytes: bytes, filename: str = "") -> bytes:
+    """Convert any image (including HEIC) to JPEG, resize if large.
+    Returns JPEG bytes ready for base64 encoding."""
+    try:
+        img = Image.open(io.BytesIO(raw_bytes))
+    except Exception:
+        raise ValueError("Could not open file as an image")
+
+    # Convert to RGB (handles RGBA, HEIC palettes, etc.)
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+
+    # Resize if any dimension exceeds 2048px — keeps quality, reduces payload
+    max_dim = 2048
+    if max(img.size) > max_dim:
+        img.thumbnail((max_dim, max_dim), Image.LANCZOS)
+        logger.info(f"Resized image to {img.size}")
+
+    buf = io.BytesIO()
+    img.save(buf, format="JPEG", quality=85, optimize=True)
+    return buf.getvalue()
+
+
+def detect_file_type(content_type: str, filename: str, raw_bytes: bytes) -> str:
+    """Determine if a file is 'pdf', 'image', or 'unknown'.
+    Handles iOS edge cases where content_type is empty or generic."""
+    ct = (content_type or "").lower().strip()
+    fn = (filename or "").lower().strip()
+
+    # Explicit PDF
+    if ct == "application/pdf" or fn.endswith(".pdf"):
+        return "pdf"
+    # PDF magic bytes
+    if raw_bytes[:5] == b"%PDF-":
+        return "pdf"
+
+    # Explicit image MIME
+    if ct.startswith("image/"):
+        return "image"
+
+    # Known image extensions
+    image_exts = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff", ".tif"}
+    if any(fn.endswith(ext) for ext in image_exts):
+        return "image"
+
+    # iOS often sends application/octet-stream or empty type for camera photos
+    if ct in ("", "application/octet-stream") and raw_bytes:
+        # Try to open as image
+        try:
+            Image.open(io.BytesIO(raw_bytes))
+            return "image"
+        except Exception:
+            pass
+
+    return "unknown"
 
 
 @api_router.post("/analyze/image")
 async def analyze_image(file: UploadFile = File(...), context: Optional[str] = Form(None)):
-    contents = await file.read()
-    if len(contents) > 15 * 1024 * 1024:
-        raise HTTPException(status_code=400, detail="File must be under 15MB")
+    stages = []
+
+    # Stage 1: Read file
+    try:
+        contents = await file.read()
+    except Exception as e:
+        logger.error(f"[analyze/image] File read error: {e}")
+        raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {e}")
+
+    file_size_mb = len(contents) / (1024 * 1024)
+    file_info = {"name": file.filename, "content_type": file.content_type, "size_mb": round(file_size_mb, 2), "bytes": len(contents)}
+    stages.append({"stage": "file_received", "ok": True, **file_info})
+    logger.info(f"[analyze/image] File received: {file_info}")
+
+    if len(contents) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail=f"File is {file_size_mb:.1f}MB — must be under 20MB.")
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 
     context_prefix = ""
     if context and context.strip():
         context_prefix = f"[CONTEXT FOR ANALYSIS]\n{context.strip()}\n\n"
 
-    content_type = file.content_type or ""
-    filename = (file.filename or "").lower()
+    # Stage 2: Detect file type
+    file_type = detect_file_type(file.content_type, file.filename, contents)
+    stages.append({"stage": "type_detection", "ok": True, "detected": file_type})
+    logger.info(f"[analyze/image] Detected type: {file_type}")
 
-    # PDF handling — extract text directly
-    if content_type == "application/pdf" or filename.endswith(".pdf"):
+    extracted_text = None
+
+    # Stage 3a: PDF — extract text
+    if file_type == "pdf":
         try:
             from PyPDF2 import PdfReader
             pdf_reader = PdfReader(io.BytesIO(contents))
@@ -263,10 +477,39 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
                 if page_text:
                     extracted_text += page_text + "\n"
             extracted_text = extracted_text.strip()
-            if len(extracted_text) < 10:
-                raise HTTPException(status_code=400, detail="Could not extract text from PDF. Try uploading an image of your sides instead.")
+            stages.append({"stage": "pdf_extract", "ok": True, "chars": len(extracted_text), "pages": len(pdf_reader.pages)})
+            logger.info(f"[analyze/image] PDF extracted: {len(extracted_text)} chars, {len(pdf_reader.pages)} pages")
+        except Exception as e:
+            stages.append({"stage": "pdf_extract", "ok": False, "error": str(e)})
+            logger.error(f"[analyze/image] PDF extract failed: {e}")
+            return _fallback_response(None, stages, f"PDF read failed: {e}")
+
+        if len(extracted_text) < 10:
+            stages.append({"stage": "pdf_text_check", "ok": False, "error": "Too little text extracted, trying vision"})
+            logger.info("[analyze/image] PDF text too short, falling back to vision OCR")
+            try:
+                jpeg_bytes = prepare_image_for_vision(contents, file.filename)
+                file_type = "image"
+                contents = jpeg_bytes
+            except ValueError as e:
+                stages.append({"stage": "pdf_to_image", "ok": False, "error": str(e)})
+                return _fallback_response(None, stages, f"PDF had no readable text and couldn't be converted to image: {e}")
+        else:
+            # Text extraction worked — send to GPT
             full_text = context_prefix + extracted_text if context_prefix else extracted_text
-            result = await analyze_with_gpt(text=full_text)
+            try:
+                result, raw = await asyncio.wait_for(
+                    analyze_with_gpt(text=full_text),
+                    timeout=90
+                )
+                stages.append({"stage": "gpt_analysis", "ok": True})
+            except asyncio.TimeoutError:
+                stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after 90s"})
+                return _fallback_response(extracted_text, stages, "GPT timed out on PDF text")
+            except Exception as e:
+                stages.append({"stage": "gpt_analysis", "ok": False, "error": str(e)})
+                return _fallback_response(extracted_text, stages, str(e))
+
             breakdown_id = str(uuid.uuid4())
             doc = {
                 "id": breakdown_id,
@@ -276,35 +519,70 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
             }
             await db.breakdowns.insert_one(doc)
             stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+            stages.append({"stage": "db_save", "ok": True})
+            stored["_debug"] = {"stages": stages, "fallback": False}
             return stored
-        except HTTPException:
-            raise
+
+    # Stage 3b: Image — convert/compress then GPT Vision
+    if file_type == "image":
+        try:
+            jpeg_bytes = prepare_image_for_vision(contents, file.filename)
+            stages.append({"stage": "image_convert", "ok": True, "jpeg_kb": round(len(jpeg_bytes) / 1024, 1)})
+            logger.info(f"[analyze/image] Image converted: {len(jpeg_bytes)/1024:.0f}KB JPEG")
+        except ValueError as e:
+            stages.append({"stage": "image_convert", "ok": False, "error": str(e)})
+            logger.error(f"[analyze/image] Image conversion failed: {e}")
+            return _fallback_response(None, stages, f"Image processing failed: {e}")
+
+        base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')
+        try:
+            result, raw = await asyncio.wait_for(
+                analyze_with_gpt(image_base64=base64_image, context=context_prefix if context_prefix else None),
+                timeout=90
+            )
+            stages.append({"stage": "gpt_vision", "ok": True})
+        except asyncio.TimeoutError:
+            stages.append({"stage": "gpt_vision", "ok": False, "error": "Timed out after 90s"})
+            return _fallback_response(None, stages, "GPT Vision timed out")
         except Exception as e:
-            logger.error(f"PDF processing error: {e}")
-            raise HTTPException(status_code=400, detail="Failed to read PDF. Try uploading an image instead.")
+            stages.append({"stage": "gpt_vision", "ok": False, "error": str(e)})
+            return _fallback_response(None, stages, str(e))
 
-    # Image handling — accept all common image types including HEIC
-    image_types = {"image/jpeg", "image/png", "image/webp", "image/heic", "image/heif", "image/gif", "image/bmp", "image/tiff"}
-    image_extensions = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff", ".tif"}
-    is_image = content_type in image_types or any(filename.endswith(ext) for ext in image_extensions) or content_type.startswith("image/")
+        breakdown_id = str(uuid.uuid4())
+        original_text = result.pop("extracted_text", "Image analysis")
+        doc = {
+            "id": breakdown_id,
+            "original_text": original_text,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            **result
+        }
+        await db.breakdowns.insert_one(doc)
+        stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+        stages.append({"stage": "db_save", "ok": True})
+        stored["_debug"] = {"stages": stages, "fallback": False}
+        return stored
 
-    if not is_image:
-        raise HTTPException(status_code=400, detail="Unsupported file type. Upload an image (JPG, PNG, HEIC) or a PDF of your sides.")
+    # Stage 3c: Unknown type
+    stages.append({"stage": "type_detection", "ok": False, "error": f"Unrecognized type: {file.content_type}"})
+    return _fallback_response(None, stages, f"Couldn't identify file type (received: {file.content_type or 'none'})")
 
-    base64_image = base64.b64encode(contents).decode('utf-8')
-    result = await analyze_with_gpt(image_base64=base64_image, context=context_prefix if context_prefix else None)
 
-    breakdown_id = str(uuid.uuid4())
-    original_text = result.pop("extracted_text", "Image analysis")
-    doc = {
-        "id": breakdown_id,
-        "original_text": original_text,
+def _fallback_response(extracted_text: str | None, stages: list, reason: str):
+    """Return a partial response instead of a hard failure.
+    Always includes debug stages so frontend can show what went wrong."""
+    logger.warning(f"[fallback] {reason}")
+    return {
+        "id": str(uuid.uuid4()),
+        "original_text": extracted_text or "",
         "created_at": datetime.now(timezone.utc).isoformat(),
-        **result
+        "scene_summary": f"Analysis incomplete — {reason.split('|')[-1].strip() if '|' in reason else reason}",
+        "character_name": "Unknown",
+        "character_objective": "", "stakes": "",
+        "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
+        "memorization": {"chunked_lines": [], "cue_recall": []},
+        "self_tape_tips": {"framing": "", "eyeline": "", "tone_energy": ""},
+        "_debug": {"stages": stages, "fallback": True, "reason": reason}
     }
-    await db.breakdowns.insert_one(doc)
-    stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
-    return stored
 
 
 @api_router.post("/regenerate-takes/{breakdown_id}")
