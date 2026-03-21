@@ -8,27 +8,31 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Backend**: FastAPI + MongoDB
 - **AI**: GPT-5.2 via Emergent LLM Key (text analysis + image vision/OCR)
 - **TTS**: ElevenLabs (live with paid key)
+- **PDF Rendering**: pymupdf (for scanned PDFs → image conversion)
 
 ## What's Implemented (March 2026)
 
+### File Upload Pipeline (Fully Hardened)
+- **Text-based PDFs**: PyPDF2 extracts text → GPT text analysis (fast path)
+- **Scanned/image-based PDFs**: PyPDF2 finds no text → pymupdf renders pages to JPEG at 200dpi → GPT Vision OCR → analysis
+- **Images**: HEIC→JPEG conversion, resize to 2048px max, iOS MIME handling
+- **Stage tracking**: Every response includes `_debug.stages` showing exactly what happened
+- **Fallback mode**: Returns partial results + extracted text instead of hard failure
+- **`/api/debug/pipeline`**: Tests LLM key, GPT, MongoDB, Pillow, HEIC, PyPDF2, pymupdf
+
 ### Guided Upload Flow
 - 3-step stepper: (1) Choose input → (2) Input + Quick/Deep → (3) Context + Analyze
-- Smooth transitions, lightweight, feels fast not like a form
-- Recent breakdowns on Step 1 with DEEP badges
+- Fast, lightweight, smooth transitions
 
 ### Memorization Suite (4 modes)
-- **My Lines** (default): Speed drill — one line at a time, large centered text, tap anywhere to advance, wraps at end. "show cue" button for context peek. Minimal UI, no distractions.
-- **Line Run**: Structured rehearsal — cue → recall → reveal → Nailed/Peeked tracking → completion summary
-- **Reader**: Chunked lines with navigation, hide/reveal, teleprompter mode
-- **Cue & Recall**: All cue-line pairs with tap-to-reveal
+- **My Lines** (default): Speed drill — tap-to-advance, large centered text, "show cue" peek
+- **Line Run**: Structured rehearsal with Nailed/Peeked tracking
+- **Reader**: Chunked lines with teleprompter mode
+- **Cue & Recall**: All pairs with tap-to-reveal
 
 ### Quick / Deep Analysis Modes
 - **Quick** (~15-25s): Fast prep, simple beats + subtext
-- **Deep** (~30-60s): Emotional arc, what character hides, layered subtext (surface/meaning/fear), physical life per beat
-
-### Stabilized Analysis Pipeline
-- Stage-by-stage debug tracking, fallback mode, `/api/debug/pipeline`
-- HEIC→JPEG, image resize, iOS MIME handling, detailed errors
+- **Deep** (~30-60s): Emotional arc, what character hides, layered subtext, physical life, director-level takes
 
 ### Breakdown Features
 - Scene Summary, Objective, Stakes, Beat Breakdown, 3 Acting Takes
