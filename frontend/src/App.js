@@ -17,6 +17,7 @@ function MainApp() {
   const [view, setView] = useState("upload");
   const [breakdown, setBreakdown] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMode, setLoadingMode] = useState("quick");
   const [memorizationOpen, setMemorizationOpen] = useState(false);
   const [sceneReaderOpen, setSceneReaderOpen] = useState(false);
   const [ttsAvailable, setTtsAvailable] = useState(false);
@@ -29,17 +30,20 @@ function MainApp() {
 
   const handleAnalyze = useCallback(async (data) => {
     setLoading(true);
+    setLoadingMode(data.mode || "quick");
     try {
       let response;
-      const timeout = 120000;
+      const isDeep = data.mode === "deep";
+      const timeout = isDeep ? 180000 : 120000;
       if (data.type === "text") {
-        response = await axios.post(`${API}/analyze/text`, { text: data.text }, { timeout });
+        response = await axios.post(`${API}/analyze/text`, { text: data.text, mode: data.mode || "quick" }, { timeout });
       } else {
         const formData = new FormData();
         formData.append("file", data.file);
         if (data.context) {
           formData.append("context", data.context);
         }
+        formData.append("mode", data.mode || "quick");
         response = await axios.post(`${API}/analyze/image`, formData, {
           timeout,
           headers: { "Content-Type": "multipart/form-data" },
@@ -138,7 +142,7 @@ function MainApp() {
       <AnimatePresence mode="wait">
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-            <LoadingScreen />
+            <LoadingScreen mode={loadingMode} />
           </motion.div>
         )}
         {!loading && view === "upload" && (

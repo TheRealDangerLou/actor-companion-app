@@ -55,6 +55,7 @@ except ImportError:
 # --- Models ---
 class AnalyzeTextRequest(BaseModel):
     text: str
+    mode: Optional[str] = "quick"
 
 class Beat(BaseModel):
     beat_number: int
@@ -104,7 +105,7 @@ class TTSRequest(BaseModel):
     voice_id: Optional[str] = None
 
 # --- Prompts ---
-ANALYSIS_SYSTEM_PROMPT = """You are a top-tier acting coach and script analyst. Your job is to give actors an IMMEDIATELY PLAYABLE breakdown they can perform right after reading.
+QUICK_SYSTEM_PROMPT = """You are a top-tier acting coach and script analyst. Your job is to give actors an IMMEDIATELY PLAYABLE breakdown they can perform right after reading.
 
 You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
 
@@ -153,6 +154,61 @@ RULES:
 - Be bold, specific, and practical.
 - Return ONLY valid JSON."""
 
+DEEP_SYSTEM_PROMPT = """You are a world-class acting coach, the kind actors seek out before career-defining auditions. You think like a director who has lived inside this scene. Your breakdown is a rehearsal tool—every word must be PLAYABLE, TRUTHFUL, and SPECIFIC to this exact material.
+
+You MUST respond with valid JSON only. No markdown, no explanation outside the JSON.
+
+{
+  "scene_summary": "2-3 sentences. What is actually happening beneath the surface of this scene? Not plot—the emotional event. What is being risked, revealed, or destroyed?",
+  "character_name": "Name of the character the actor is reading for",
+  "character_objective": "One clear, active, PLAYABLE objective using a strong verb. Not what they want to feel—what they are trying to DO to the other person. e.g. 'To corner David into admitting he's leaving'",
+  "stakes": "What happens if they fail? Be visceral and personal—not plot consequences, but emotional ones. What do they lose inside themselves?",
+  "emotional_arc": "Describe the character's emotional journey from the first line to the last. Where do they start? What cracks open? What has shifted by the end? Be specific about the turning point.",
+  "what_they_hide": "What is the character actively trying NOT to show or say? What truth are they protecting themselves from? This is the engine underneath the scene.",
+  "beats": [
+    {
+      "beat_number": 1,
+      "title": "Short, evocative title that captures the shift",
+      "description": "What changes HERE—emotionally, tactically, between the characters. Be precise about the before and after of this moment.",
+      "emotion": "The dominant energy. Not a single word—a specific shade. e.g. 'controlled fury leaking through politeness'",
+      "subtext_surface": "What they appear to be saying on the surface.",
+      "subtext_meaning": "What they actually mean underneath.",
+      "subtext_fear": "What they're afraid will happen if they say what they really mean.",
+      "key_words": ["word1", "word2"],
+      "physical_life": "What is happening in the body at this beat? Jaw tension, breath held, hands gripping, weight shifting? Be specific."
+    }
+  ],
+  "acting_takes": {
+    "grounded": "A naturalistic, lived-in take. Direct the actor as if you're whispering in their ear 10 seconds before 'action.' Include: breath pattern, physical anchor (what are they doing with their hands/body?), tempo and rhythm, where the emotion lives in the body. Reference specific lines and how to land them. This should feel like a real director's note, not a description.",
+    "bold": "A take that makes a strong, surprising choice without being theatrical. What if the character is doing something emotionally unexpected—laughing when they should cry, going still when they should explode? Give a specific emotional anchor and physical commitment. Reference specific moments in the text where this choice would land hardest.",
+    "wildcard": "A genuine casting surprise. Not weird for weird's sake—a truthful choice that reframes the entire scene. Maybe the character already knows the outcome. Maybe they're saying goodbye. Maybe they're performing calm while falling apart. Be specific: what is the private inner life that makes every line read differently? Reference specific lines."
+  },
+  "memorization": {
+    "chunked_lines": [
+      {"chunk_label": "Chunk 1: [emotional context for this group]", "lines": "2-4 lines of actual dialogue grouped by thought/breath"}
+    ],
+    "cue_recall": [
+      {"cue": "The last thing said before your line", "your_line": "Your character's exact response"}
+    ]
+  },
+  "self_tape_tips": {
+    "framing": "Specific framing for THIS scene and why. What does the camera need to see in this particular scene?",
+    "eyeline": "Where to look, when to break eye contact, and the emotional reason for each choice. Be specific to moments in the scene.",
+    "tone_energy": "Energy level 1-10 with specific adjustments. Where should the actor start, where should they peak, and where should they land?"
+  }
+}
+
+RULES:
+- You are coaching a REAL ACTOR for a REAL AUDITION. Everything must be immediately performable.
+- Think like you've directed this scene 50 times and know every trap an actor can fall into.
+- Beats must track the EMOTIONAL shifts, not just topic changes. If the emotion doesn't change, it's the same beat.
+- Subtext layers (surface/meaning/fear) are the core of your value. Make them vivid and specific.
+- Acting takes must reference SPECIFIC LINES and moments from the text. No generic direction.
+- "what_they_hide" and "emotional_arc" are what separate a good audition from a booking. Make them count.
+- If character context or casting notes are provided, weave them into EVERY section—don't just acknowledge them.
+- Physical_life in beats should be specific enough that an actor can do it right now in their living room.
+- Return ONLY valid JSON."""
+
 REGENERATE_TAKES_PROMPT = """You are a top-tier acting coach. Generate 3 COMPLETELY NEW acting takes for this scene. These must be genuinely different from typical choices—specific, physical, immediately playable.
 
 Return ONLY valid JSON:
@@ -188,22 +244,25 @@ def parse_json_response(response_text):
     raise ValueError("Could not parse JSON from response")
 
 
-async def analyze_with_gpt(text=None, image_base64=None, context=None):
-    """Core GPT call. Truncates long text to ~2000 chars. Returns (result_dict, raw_response_str)."""
+async def analyze_with_gpt(text=None, image_base64=None, context=None, mode="quick"):
+    """Core GPT call. mode='quick' truncates to ~2500 chars, mode='deep' allows ~8000. Returns (result_dict, raw_response_str)."""
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     if not api_key:
         raise Exception("STAGE:gpt_init | LLM API key not configured in environment")
 
-    # Truncate text to ~2000 chars (roughly 1-2 pages) to keep GPT reliable
-    if text and len(text) > 2500:
-        text = text[:2500] + "\n\n[...truncated for analysis — first ~2 pages used]"
-        logger.info("Truncated input text to 2500 chars")
+    is_deep = mode == "deep"
+    max_chars = 8000 if is_deep else 2500
+    system_prompt = DEEP_SYSTEM_PROMPT if is_deep else QUICK_SYSTEM_PROMPT
+
+    if text and len(text) > max_chars:
+        text = text[:max_chars] + f"\n\n[...truncated — first ~{max_chars // 500} pages used]"
+        logger.info(f"Truncated input text to {max_chars} chars (mode={mode})")
 
     try:
         chat = LlmChat(
             api_key=api_key,
             session_id=str(uuid.uuid4()),
-            system_message=ANALYSIS_SYSTEM_PROMPT
+            system_message=system_prompt
         ).with_model("openai", "gpt-5.2")
     except Exception as e:
         raise Exception(f"STAGE:gpt_init | Failed to create LLM chat: {e}")
@@ -211,7 +270,10 @@ async def analyze_with_gpt(text=None, image_base64=None, context=None):
     try:
         if image_base64:
             image_content = ImageContent(image_base64=image_base64)
-            vision_prompt = "Extract ALL text from this audition sides image, then analyze it as a script. Provide the full acting breakdown. Also include a field 'extracted_text' with the raw text you read from the image."
+            if is_deep:
+                vision_prompt = "Extract ALL text from this audition sides image. Then provide a DEEP acting breakdown—focus on emotional truth, layered subtext, what the character hides, and the emotional arc across the scene. Include 'extracted_text' with the raw text."
+            else:
+                vision_prompt = "Extract ALL text from this audition sides image, then analyze it as a script. Provide the full acting breakdown. Also include a field 'extracted_text' with the raw text you read from the image."
             if context:
                 vision_prompt = f"{context}\n{vision_prompt}"
             user_msg = UserMessage(
@@ -219,9 +281,11 @@ async def analyze_with_gpt(text=None, image_base64=None, context=None):
                 file_contents=[image_content]
             )
         else:
-            user_msg = UserMessage(
-                text=f"Analyze these audition sides and provide a full acting breakdown:\n\n{text}"
-            )
+            if is_deep:
+                prompt = f"Provide a DEEP acting breakdown of these audition sides. Focus on emotional truth, layered subtext, what the character is hiding, the emotional arc, and highly specific playable choices.\n\n{text}"
+            else:
+                prompt = f"Analyze these audition sides and provide a full acting breakdown:\n\n{text}"
+            user_msg = UserMessage(text=prompt)
     except Exception as e:
         raise Exception(f"STAGE:gpt_message_build | Failed to build message: {e}")
 
@@ -318,14 +382,16 @@ async def analyze_text(request: AnalyzeTextRequest):
     if len(request.text.strip()) < 10:
         raise HTTPException(status_code=400, detail="Please provide at least a few lines of dialogue")
 
-    stages.append({"stage": "input_received", "ok": True, "chars": len(request.text)})
-    logger.info(f"[analyze/text] Input: {len(request.text)} chars")
+    mode = request.mode or "quick"
+    stages.append({"stage": "input_received", "ok": True, "chars": len(request.text), "mode": mode})
+    logger.info(f"[analyze/text] Input: {len(request.text)} chars, mode={mode}")
 
-    # GPT call with timeout
+    # GPT call with timeout (deep gets more time)
+    gpt_timeout = 120 if mode == "deep" else 90
     try:
         result, raw = await asyncio.wait_for(
-            analyze_with_gpt(text=request.text),
-            timeout=90
+            analyze_with_gpt(text=request.text, mode=mode),
+            timeout=gpt_timeout
         )
         stages.append({"stage": "gpt_analysis", "ok": True})
     except asyncio.TimeoutError:
@@ -367,6 +433,7 @@ async def analyze_text(request: AnalyzeTextRequest):
     doc = {
         "id": breakdown_id,
         "original_text": request.text,
+        "mode": mode,
         "created_at": datetime.now(timezone.utc).isoformat(),
         **result
     }
@@ -435,8 +502,9 @@ def detect_file_type(content_type: str, filename: str, raw_bytes: bytes) -> str:
 
 
 @api_router.post("/analyze/image")
-async def analyze_image(file: UploadFile = File(...), context: Optional[str] = Form(None)):
+async def analyze_image(file: UploadFile = File(...), context: Optional[str] = Form(None), mode: Optional[str] = Form("quick")):
     stages = []
+    mode = mode or "quick"
 
     # Stage 1: Read file
     try:
@@ -446,7 +514,7 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
         raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {e}")
 
     file_size_mb = len(contents) / (1024 * 1024)
-    file_info = {"name": file.filename, "content_type": file.content_type, "size_mb": round(file_size_mb, 2), "bytes": len(contents)}
+    file_info = {"name": file.filename, "content_type": file.content_type, "size_mb": round(file_size_mb, 2), "bytes": len(contents), "mode": mode}
     stages.append({"stage": "file_received", "ok": True, **file_info})
     logger.info(f"[analyze/image] File received: {file_info}")
 
@@ -497,10 +565,11 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
         else:
             # Text extraction worked — send to GPT
             full_text = context_prefix + extracted_text if context_prefix else extracted_text
+            gpt_timeout = 120 if mode == "deep" else 90
             try:
                 result, raw = await asyncio.wait_for(
-                    analyze_with_gpt(text=full_text),
-                    timeout=90
+                    analyze_with_gpt(text=full_text, mode=mode),
+                    timeout=gpt_timeout
                 )
                 stages.append({"stage": "gpt_analysis", "ok": True})
             except asyncio.TimeoutError:
@@ -514,6 +583,7 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
             doc = {
                 "id": breakdown_id,
                 "original_text": extracted_text,
+                "mode": mode,
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 **result
             }
@@ -535,10 +605,11 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
             return _fallback_response(None, stages, f"Image processing failed: {e}")
 
         base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')
+        gpt_timeout = 120 if mode == "deep" else 90
         try:
             result, raw = await asyncio.wait_for(
-                analyze_with_gpt(image_base64=base64_image, context=context_prefix if context_prefix else None),
-                timeout=90
+                analyze_with_gpt(image_base64=base64_image, context=context_prefix if context_prefix else None, mode=mode),
+                timeout=gpt_timeout
             )
             stages.append({"stage": "gpt_vision", "ok": True})
         except asyncio.TimeoutError:
@@ -553,6 +624,7 @@ async def analyze_image(file: UploadFile = File(...), context: Optional[str] = F
         doc = {
             "id": breakdown_id,
             "original_text": original_text,
+            "mode": mode,
             "created_at": datetime.now(timezone.utc).isoformat(),
             **result
         }

@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Upload, FileText, Image, Sparkles, ArrowRight, Camera, ChevronDown, ChevronUp, Info, Clock } from "lucide-react";
+import { Upload, FileText, Image, Sparkles, ArrowRight, Camera, ChevronDown, ChevronUp, Info, Clock, Layers } from "lucide-react";
 
 const HERO_BG = "https://images.unsplash.com/photo-1761229660731-891484da5c35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHw0fHx0aGVhdGVyJTIwc3RhZ2UlMjBzcG90bGlnaHQlMjBkYXJrfGVufDB8fHx8MTc3Mzg4ODc2Mnww&ixlib=rb-4.1.0&q=85&w=1920";
 
@@ -26,6 +26,7 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
   const [imagePreview, setImagePreview] = useState(null);
   const [dragOver, setDragOver] = useState(false);
   const [showContext, setShowContext] = useState(false);
+  const [mode, setMode] = useState("quick");
   const [context, setContext] = useState({ character: "", synopsis: "", castingNotes: "", characterDesc: "" });
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -93,9 +94,9 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
       const fullText = contextStr
         ? `[CONTEXT FOR ANALYSIS]\n${contextStr}\n\n[AUDITION SIDES]\n${scriptText}`
         : scriptText;
-      onAnalyze({ type: "text", text: fullText });
+      onAnalyze({ type: "text", text: fullText, mode });
     } else if ((tab === "image" || tab === "camera") && imageFile) {
-      onAnalyze({ type: "image", file: imageFile, context: contextStr });
+      onAnalyze({ type: "image", file: imageFile, context: contextStr, mode });
     }
   };
 
@@ -303,6 +304,40 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
               </div>
             </TabsContent>
           </Tabs>
+
+          {/* Analysis Mode Toggle */}
+          <div className="mt-5 flex items-center gap-3" data-testid="mode-toggle">
+            <button
+              onClick={() => setMode("quick")}
+              data-testid="mode-quick"
+              className={`flex-1 py-2.5 px-3 rounded-lg border text-sm font-medium transition-all ${
+                mode === "quick"
+                  ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+                  : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400"
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Quick</span>
+              </div>
+              <p className="text-[10px] mt-0.5 opacity-70">~15s &middot; fast prep</p>
+            </button>
+            <button
+              onClick={() => setMode("deep")}
+              data-testid="mode-deep"
+              className={`flex-1 py-2.5 px-3 rounded-lg border text-sm font-medium transition-all ${
+                mode === "deep"
+                  ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+                  : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400"
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Layers className="w-3.5 h-3.5" />
+                <span>Deep</span>
+              </div>
+              <p className="text-[10px] mt-0.5 opacity-70">~30s &middot; full breakdown</p>
+            </button>
+          </div>
 
           {/* Optional Context */}
           <div className="mt-5">

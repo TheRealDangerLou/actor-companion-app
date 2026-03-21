@@ -32,6 +32,8 @@ import {
   Mic,
   ExternalLink,
   Printer,
+  TrendingUp,
+  EyeOff,
 } from "lucide-react";
 
 const container = {
@@ -76,13 +78,17 @@ export default function BreakdownView({
     character_name,
     character_objective,
     stakes,
+    emotional_arc,
+    what_they_hide,
     beats = [],
     acting_takes = {},
     self_tape_tips = {},
     _debug,
+    mode,
   } = breakdown;
 
   const isFallback = _debug?.fallback;
+  const isDeep = mode === "deep" || !!emotional_arc;
 
   return (
     <div
@@ -121,6 +127,11 @@ export default function BreakdownView({
             <h1 className="font-display text-lg md:text-xl font-bold text-white truncate">
               {character_name || "Scene Breakdown"}
             </h1>
+            {isDeep && (
+              <Badge className="bg-amber-500/10 text-amber-500 border border-amber-500/20 text-[10px] shrink-0">
+                DEEP
+              </Badge>
+            )}
           </div>
           {!isShareView && (
             <div className="flex items-center gap-1.5">
@@ -290,6 +301,44 @@ export default function BreakdownView({
           </Card>
         </motion.div>
 
+        {/* Deep Mode: Emotional Arc + What They Hide */}
+        {isDeep && emotional_arc && (
+          <motion.div variants={item} className="md:col-span-2">
+            <Card
+              data-testid="emotional-arc-card"
+              className="card-spotlight bg-zinc-950/50 border-zinc-800"
+            >
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm uppercase tracking-widest text-amber-500/80">
+                  <TrendingUp className="w-4 h-4" />
+                  Emotional Arc
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-zinc-200 leading-relaxed">{emotional_arc}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+        {isDeep && what_they_hide && (
+          <motion.div variants={item} className="md:col-span-2">
+            <Card
+              data-testid="what-they-hide-card"
+              className="card-spotlight bg-zinc-950/50 border-zinc-800"
+            >
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-sm uppercase tracking-widest text-rose-400/80">
+                  <EyeOff className="w-4 h-4" />
+                  What They Hide
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-zinc-200 leading-relaxed italic">{what_they_hide}</p>
+              </CardContent>
+            </Card>
+          </motion.div>
+        )}
+
         {/* Beat Breakdown - full width */}
         <motion.div variants={item} className="md:col-span-2">
           <Card
@@ -334,14 +383,45 @@ export default function BreakdownView({
                           beat.key_words
                         )}
                       </p>
-                      <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-amber-500/40">
-                        <p className="text-xs uppercase tracking-wider text-zinc-500 mb-1">
-                          Subtext (inner voice)
-                        </p>
-                        <p className="text-sm text-zinc-300 italic leading-relaxed font-script">
-                          "{beat.subtext}"
-                        </p>
-                      </div>
+                      {/* Layered subtext (Deep) vs single subtext (Quick) */}
+                      {beat.subtext_surface || beat.subtext_meaning || beat.subtext_fear ? (
+                        <div className="space-y-2">
+                          {beat.subtext_surface && (
+                            <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-zinc-600/40">
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">On the surface</p>
+                              <p className="text-sm text-zinc-400 leading-relaxed font-script">"{beat.subtext_surface}"</p>
+                            </div>
+                          )}
+                          {beat.subtext_meaning && (
+                            <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-amber-500/40">
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">What they mean</p>
+                              <p className="text-sm text-zinc-300 italic leading-relaxed font-script">"{beat.subtext_meaning}"</p>
+                            </div>
+                          )}
+                          {beat.subtext_fear && (
+                            <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-rose-500/40">
+                              <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">What they fear</p>
+                              <p className="text-sm text-zinc-300 italic leading-relaxed font-script">"{beat.subtext_fear}"</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : beat.subtext ? (
+                        <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-amber-500/40">
+                          <p className="text-xs uppercase tracking-wider text-zinc-500 mb-1">
+                            Subtext (inner voice)
+                          </p>
+                          <p className="text-sm text-zinc-300 italic leading-relaxed font-script">
+                            "{beat.subtext}"
+                          </p>
+                        </div>
+                      ) : null}
+                      {/* Physical life (Deep mode) */}
+                      {beat.physical_life && (
+                        <div className="bg-zinc-900/50 rounded-md p-3 border-l-2 border-emerald-500/40">
+                          <p className="text-[10px] uppercase tracking-wider text-zinc-500 mb-1">Physical life</p>
+                          <p className="text-sm text-zinc-300 leading-relaxed">{beat.physical_life}</p>
+                        </div>
+                      )}
                       {beat.key_words?.length > 0 && (
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs text-zinc-500">

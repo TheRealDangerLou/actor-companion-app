@@ -1,0 +1,56 @@
+{
+  "summary": "Comprehensive testing of Quick/Deep mode feature for Actor's Companion. All features working correctly: mode toggle on upload page, different loading screens per mode, deep-only fields (emotional_arc, what_they_hide, layered subtext, physical_life) display correctly, quick mode correctly omits deep-only fields.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "GET /api/ returns 200 - API health check",
+    "POST /api/analyze/text with mode=quick returns 200 with quick format (simple subtext, no emotional_arc/what_they_hide)",
+    "POST /api/analyze/text with mode=deep returns 200 with deep format (emotional_arc, what_they_hide, layered subtext, physical_life)",
+    "POST /api/analyze/text with no mode defaults to quick",
+    "POST /api/analyze/image with mode=quick works correctly",
+    "POST /api/analyze/image with mode=deep works correctly",
+    "GET /api/breakdowns returns list with mode field",
+    "Frontend: Quick/Deep toggle buttons present with data-testid='mode-quick' and data-testid='mode-deep'",
+    "Frontend: Quick mode selected by default (amber border/highlight)",
+    "Frontend: Clicking Deep mode changes selection (visual change)",
+    "Frontend: Quick loading screen shows 'Analyzing your scene' title",
+    "Frontend: Deep loading screen shows 'Deep scene study' title with 'Richer beats, layered subtext, emotional arc' subtitle",
+    "Frontend: Deep breakdown view shows DEEP badge in header",
+    "Frontend: Deep breakdown view shows Emotional Arc card (data-testid='emotional-arc-card')",
+    "Frontend: Deep breakdown view shows What They Hide card (data-testid='what-they-hide-card')",
+    "Frontend: Deep breakdown beats show layered subtext (On the surface / What they mean / What they fear)",
+    "Frontend: Deep breakdown beats show Physical life section",
+    "Frontend: Quick breakdown does NOT show DEEP badge",
+    "Frontend: Quick breakdown does NOT show Emotional Arc card",
+    "Frontend: Quick breakdown does NOT show What They Hide card",
+    "Frontend: Quick breakdown shows simple 'Subtext (inner voice)' format",
+    "Regression: Recent breakdowns list displays on upload page",
+    "Regression: Clicking recent breakdown loads it correctly",
+    "Regression: New Analysis button returns to upload page"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_quick_deep_mode.py",
+    "/app/test_reports/pytest/quick_deep_mode_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [],
+  "updated_files": [
+    "/app/backend/tests/test_quick_deep_mode.py"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 tests passed)",
+    "frontend": "100% (all UI tests passed)"
+  },
+  "seed_data_creation": "None - used test script text for analysis",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Quick/Deep mode feature fully implemented and tested. Quick mode (~15s) returns simple beat subtext without emotional_arc or what_they_hide. Deep mode (~30-60s) returns emotional_arc, what_they_hide, and beats with subtext_surface/subtext_meaning/subtext_fear plus physical_life. Frontend correctly displays different loading screens and breakdown views per mode. Test file at /app/backend/tests/test_quick_deep_mode.py can be reused for regression testing.",
+  "rca_of_the_issue": "N/A - No bugs found. All Quick/Deep mode features working correctly."
+}
