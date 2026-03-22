@@ -72,6 +72,8 @@ function MainApp() {
           .map(s => `${s.stage}: ${s.error}`)
           .join(" | ");
         toast.error(`Analysis incomplete: ${stageInfo || reason}`, { duration: 10000 });
+      } else if (result.from_cache || result._debug?.cached) {
+        toast.success("Breakdown ready (from cache — $0.00)");
       } else {
         toast.success("Breakdown ready. Time to work.");
       }
@@ -227,13 +229,22 @@ function MainApp() {
         }
       }
 
-      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns };
+      const successBreakdowns = breakdowns.filter(b => !b.id?.startsWith("failed-"));
+      const cachedCount = successBreakdowns.filter(b => b.from_cache).length;
+      const freshCount = successBreakdowns.length - cachedCount;
+      const COST_MAP = { quick: 0.03, deep: 0.08 };
+      const estCost = freshCount * (COST_MAP[mode] || 0.03);
+      const costSummary = { total: successBreakdowns.length, cached: cachedCount, fresh: freshCount, estimatedCost: estCost };
+
+      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns, costSummary };
       if (breakdowns.length > 0) {
         setScriptData(result);
         setView("script");
-        const successCount = breakdowns.filter(b => !b.id?.startsWith("failed-")).length;
-        if (successCount > 0) {
-          toast.success(`${successCount} scene${successCount !== 1 ? 's' : ''} analyzed. Time to prep.`);
+        if (successBreakdowns.length > 0) {
+          const parts = [`${successBreakdowns.length} scene${successBreakdowns.length !== 1 ? 's' : ''} analyzed`];
+          if (cachedCount > 0) parts.push(`${cachedCount} from cache`);
+          parts.push(`Est. $${estCost.toFixed(2)}`);
+          toast.success(parts.join(' · '));
         }
       } else {
         toast.error("No scenes could be analyzed. Check your LLM key balance.");
