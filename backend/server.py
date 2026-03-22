@@ -121,6 +121,19 @@ class BatchAnalyzeRequest(BaseModel):
     character_name: str
     mode: Optional[str] = "quick"
 
+class SingleSceneRequest(BaseModel):
+    script_id: str
+    scene_number: int
+    scene_heading: str
+    text: str
+    character_name: str
+    mode: Optional[str] = "quick"
+
+class CreateScriptRequest(BaseModel):
+    character_name: str
+    mode: Optional[str] = "quick"
+    scene_count: int
+
 
 # --- Scene Parsing ---
 def parse_scenes_regex(text: str) -> Optional[List[dict]]:
@@ -1206,6 +1219,73 @@ async def get_script(script_id: str):
         **script,
         "breakdowns": breakdowns,
     }
+
+
+@api_router.post("/scripts/create")
+async def create_script(request: CreateScriptRequest):
+    """Initialize a script record before analyzing scenes one by one."""
+    script_id = str(uuid.uuid4())
+    doc = {
+        "id": script_id,
+        "character_name": request.character_name.strip(),
+        "mode": request.mode or "quick",
+        "scene_count": request.scene_count,
+        "breakdown_ids": [],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.scripts.insert_one(doc)
+    logger.info(f"[scripts/create] Created script {script_id} for {request.character_name}, {request.scene_count} scenes")
+    return {"script_id": script_id}
+
+
+@api_router.post("/analyze/scene")
+async def analyze_single_scene(request: SingleSceneRequest):
+    """Analyze a single scene and link it to an existing script. Designed to avoid proxy timeouts."""
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Scene text cannot be empty")
+
+    character_name = request.character_name.strip()
+    mode = request.mode or "quick"
+    analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {request.scene_heading}]\n\n{request.text}"
+
+    logger.info(f"[analyze/scene] script={request.script_id}, scene #{request.scene_number}: {request.scene_heading}, mode={mode}")
+
+    try:
+        gpt_timeout = 120 if mode == "deep" else 90
+        result, raw = await asyncio.wait_for(
+            analyze_with_gpt(text=analysis_text, mode=mode),
+            timeout=gpt_timeout
+        )
+
+        breakdown_id = str(uuid.uuid4())
+        doc = {
+            "id": breakdown_id,
+            "script_id": request.script_id,
+            "scene_number": request.scene_number,
+            "scene_heading": request.scene_heading,
+            "original_text": request.text,
+            "mode": mode,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            **result
+        }
+        await db.breakdowns.insert_one(doc)
+        stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+
+        # Link to script
+        await db.scripts.update_one(
+            {"id": request.script_id},
+            {"$push": {"breakdown_ids": breakdown_id}}
+        )
+
+        logger.info(f"[analyze/scene] Scene #{request.scene_number} complete: {breakdown_id}")
+        return stored
+
+    except asyncio.TimeoutError:
+        logger.error(f"[analyze/scene] Scene #{request.scene_number} timed out")
+        raise HTTPException(status_code=504, detail=f"Analysis timed out for scene #{request.scene_number}. Try Quick mode.")
+    except Exception as e:
+        logger.error(f"[analyze/scene] Scene #{request.scene_number} failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)[:200]}")
 
 
 # Curated default voices — available with any ElevenLabs API key

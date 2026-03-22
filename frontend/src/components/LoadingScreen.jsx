@@ -17,11 +17,13 @@ const DEEP_PHASES = [
   "Crafting your deep breakdown...",
 ];
 
-export default function LoadingScreen({ mode = "quick" }) {
+export default function LoadingScreen({ mode = "quick", sceneProgress = null }) {
   const isDeep = mode === "deep";
   const phases = isDeep ? DEEP_PHASES : QUICK_PHASES;
   const duration = isDeep ? 120 : 60;
   const Icon = isDeep ? Layers : Sparkles;
+
+  const isMultiScene = sceneProgress && sceneProgress.total > 1;
 
   return (
     <div
@@ -50,13 +52,22 @@ export default function LoadingScreen({ mode = "quick" }) {
 
         {/* Title */}
         <h2 className="font-display text-2xl md:text-3xl font-bold text-white mb-2 tracking-tight">
-          {isDeep ? "Deep scene study" : "Analyzing your scene"}
+          {isMultiScene
+            ? `Analyzing scene ${sceneProgress.current} of ${sceneProgress.total}`
+            : isDeep ? "Deep scene study" : "Analyzing your scene"}
         </h2>
+
+        {/* Scene heading */}
+        {isMultiScene && sceneProgress.heading && (
+          <p className="text-xs text-zinc-500 font-mono mb-2 max-w-xs truncate text-center">
+            {sceneProgress.heading}
+          </p>
+        )}
 
         {/* Mode badge */}
         {isDeep && (
           <p className="text-xs text-amber-500/60 mb-6">
-            Richer beats, layered subtext, emotional arc
+            Richer beats, layered subtext, tactical arc
           </p>
         )}
         {!isDeep && <div className="mb-6" />}
@@ -82,14 +93,30 @@ export default function LoadingScreen({ mode = "quick" }) {
         </div>
 
         {/* Progress bar */}
-        <div className="w-48 h-1 bg-zinc-900 rounded-full overflow-hidden">
-          <motion.div
-            className="h-full bg-amber-500 rounded-full"
-            initial={{ width: "0%" }}
-            animate={{ width: "100%" }}
-            transition={{ duration, ease: "easeInOut" }}
-          />
-        </div>
+        {isMultiScene ? (
+          <div className="w-48">
+            <div className="h-1 bg-zinc-900 rounded-full overflow-hidden">
+              <motion.div
+                className="h-full bg-amber-500 rounded-full"
+                initial={false}
+                animate={{ width: `${(sceneProgress.current / sceneProgress.total) * 100}%` }}
+                transition={{ duration: 0.5, ease: "easeOut" }}
+              />
+            </div>
+            <p className="text-[10px] text-zinc-600 text-center mt-2 tabular-nums">
+              {sceneProgress.current}/{sceneProgress.total} complete
+            </p>
+          </div>
+        ) : (
+          <div className="w-48 h-1 bg-zinc-900 rounded-full overflow-hidden">
+            <motion.div
+              className="h-full bg-amber-500 rounded-full"
+              initial={{ width: "0%" }}
+              animate={{ width: "100%" }}
+              transition={{ duration, ease: "easeInOut" }}
+            />
+          </div>
+        )}
       </div>
     </div>
   );

@@ -146,39 +146,81 @@ function MainApp() {
     setActiveScriptBreakdown(null);
   }, []);
 
+  const [sceneProgress, setSceneProgress] = useState(null); // {current, total, heading}
+
   const handleFullScriptAnalyze = useCallback(async (data) => {
     // data = { scenes: [...], character_name, mode }
-    setLoading(true);
-    setLoadingMode(data.mode || "quick");
-    try {
-      const response = await axios.post(`${API}/analyze/batch`, {
-        scenes: data.scenes.map(s => ({
-          scene_number: s.scene_number,
-          text: s.text,
-          heading: s.heading,
-        })),
-        character_name: data.character_name,
-        mode: data.mode || "quick",
-      }, { timeout: data.scenes.length * 120000 }); // ~2min per scene max
+    const scenes = data.scenes;
+    const mode = data.mode || "quick";
+    const characterName = data.character_name;
 
-      const result = response.data;
+    setLoading(true);
+    setLoadingMode(mode);
+    setSceneProgress({ current: 0, total: scenes.length, heading: "" });
+
+    try {
+      // Step 1: Create script record
+      const createResp = await axios.post(`${API}/scripts/create`, {
+        character_name: characterName,
+        mode,
+        scene_count: scenes.length,
+      }, { timeout: 15000 });
+      const { script_id } = createResp.data;
+
+      // Step 2: Analyze each scene individually (avoids proxy timeout)
+      const breakdowns = [];
+      for (let i = 0; i < scenes.length; i++) {
+        const scene = scenes[i];
+        setSceneProgress({
+          current: i + 1,
+          total: scenes.length,
+          heading: scene.heading || `Scene ${scene.scene_number}`,
+        });
+
+        try {
+          const resp = await axios.post(`${API}/analyze/scene`, {
+            script_id,
+            scene_number: scene.scene_number,
+            scene_heading: scene.heading || `Scene ${scene.scene_number}`,
+            text: scene.text,
+            character_name: characterName,
+            mode,
+          }, { timeout: 180000 }); // 3min per scene max
+          breakdowns.push(resp.data);
+        } catch (sceneErr) {
+          const errMsg = sceneErr.response?.data?.detail || sceneErr.message;
+          console.error(`Scene ${scene.scene_number} failed:`, errMsg);
+          // Add placeholder for failed scene
+          breakdowns.push({
+            id: `failed-${i}`,
+            script_id,
+            scene_number: scene.scene_number,
+            scene_heading: scene.heading,
+            original_text: scene.text,
+            mode,
+            scene_summary: `Analysis failed: ${errMsg}`,
+            character_name: characterName,
+            character_objective: "", stakes: "",
+            beats: [], acting_takes: { grounded: "", bold: "", wildcard: "" },
+            memorization: { chunked_lines: [], cue_recall: [] },
+            self_tape_tips: { framing: "", eyeline: "", tone_energy: "" },
+          });
+          toast.error(`Scene ${scene.scene_number} failed — skipping.`, { duration: 4000 });
+        }
+      }
+
+      const result = { script_id, character_name: characterName, mode, breakdowns };
       setScriptData(result);
       setView("script");
-      toast.success(`${result.breakdowns.length} scene${result.breakdowns.length > 1 ? 's' : ''} analyzed. Time to prep.`);
-      // Refresh recent list
+      const successCount = breakdowns.filter(b => !b.id?.startsWith("failed-")).length;
+      toast.success(`${successCount} scene${successCount !== 1 ? 's' : ''} analyzed. Time to prep.`);
       axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
     } catch (error) {
-      let msg;
-      if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
-        msg = "Request timed out. Try fewer scenes or Quick mode.";
-      } else if (!error.response) {
-        msg = `Network error — check your connection.`;
-      } else {
-        msg = error.response?.data?.detail || `Server error (${error.response.status})`;
-      }
+      const msg = error.response?.data?.detail || error.message || "Failed to start analysis";
       toast.error(msg, { duration: 8000 });
     }
     setLoading(false);
+    setSceneProgress(null);
   }, []);
 
   const handleLoadBreakdown = useCallback(async (id) => {
@@ -198,7 +240,7 @@ function MainApp() {
       <AnimatePresence mode="wait">
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-            <LoadingScreen mode={loadingMode} />
+            <LoadingScreen mode={loadingMode} sceneProgress={sceneProgress} />
           </motion.div>
         )}
         {!loading && view === "upload" && (
