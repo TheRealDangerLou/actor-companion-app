@@ -26,9 +26,16 @@ function MainApp() {
   const [recentBreakdowns, setRecentBreakdowns] = useState([]);
   // Track active breakdown for memorization/scene reader in script mode
   const [activeScriptBreakdown, setActiveScriptBreakdown] = useState(null);
+  const [voices, setVoices] = useState([]);
 
   useEffect(() => {
     axios.get(`${API}/tts/status`).then(r => setTtsAvailable(r.data.available)).catch(() => {});
+    axios.get(`${API}/tts/voices`).then(r => {
+      if (r.data.available && r.data.voices?.length) {
+        setVoices(r.data.voices);
+        setTtsAvailable(true);
+      }
+    }).catch(() => {});
     axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
   }, []);
 
@@ -263,6 +270,7 @@ function MainApp() {
             memorization={(activeScriptBreakdown || breakdown).memorization}
             characterName={(activeScriptBreakdown || breakdown).character_name}
             ttsAvailable={ttsAvailable}
+            voices={voices}
             onClose={() => { setSceneReaderOpen(false); setActiveScriptBreakdown(null); }}
           />
         )}

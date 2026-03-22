@@ -37,6 +37,27 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   const [mode, setMode] = useState("quick");
   const [showContext, setShowContext] = useState(false);
   const [context, setContext] = useState({ character: "", synopsis: "", castingNotes: "", characterDesc: "" });
+  const [clarifications, setClarifications] = useState(new Set());
+
+  const CLARIFICATION_OPTIONS = [
+    { id: "cold_read", label: "Cold read", hint: "First time seeing this material" },
+    { id: "comedic", label: "Comedic", hint: "Scene is comedic in tone" },
+    { id: "dramatic", label: "Dramatic", hint: "Scene is dramatic/serious" },
+    { id: "antagonist", label: "I'm the antagonist", hint: "Playing the villain/obstacle" },
+    { id: "callback", label: "Callback", hint: "Second or later audition" },
+    { id: "self_tape", label: "Self-tape", hint: "Recording at home, not in the room" },
+    { id: "chemistry_read", label: "Chemistry read", hint: "Reading with another actor" },
+    { id: "under_5", label: "Under-5", hint: "Small role, few lines" },
+  ];
+
+  const toggleClarification = useCallback((id) => {
+    setClarifications(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
@@ -192,6 +213,12 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
     if (context.synopsis.trim()) parts.push(`Project synopsis: ${context.synopsis.trim()}`);
     if (context.castingNotes.trim()) parts.push(`Notes from casting: ${context.castingNotes.trim()}`);
     if (context.characterDesc.trim()) parts.push(`Character description: ${context.characterDesc.trim()}`);
+    if (clarifications.size > 0) {
+      const labels = CLARIFICATION_OPTIONS
+        .filter(o => clarifications.has(o.id))
+        .map(o => `${o.label}: ${o.hint}`);
+      parts.push(`Actor notes: ${labels.join('; ')}`);
+    }
     return parts.length > 0 ? parts.join("\n\n") : "";
   };
 
@@ -211,7 +238,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
     (inputType === "text" && scriptText.trim().length >= 10) ||
     ((inputType === "file" || inputType === "snap") && imageFile);
 
-  const hasContext = Object.values(context).some(v => v.trim());
+  const hasContext = Object.values(context).some(v => v.trim()) || clarifications.size > 0;
 
   const goToStep = (s) => setStep(s);
 
@@ -661,6 +688,30 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                           </motion.div>
                         )}
                       </AnimatePresence>
+                    </div>
+
+                    {/* Clarification toggles */}
+                    <div className="mt-4">
+                      <p className="text-xs text-zinc-600 mb-2">Quick flags (optional)</p>
+                      <div className="flex flex-wrap gap-1.5" data-testid="clarification-toggles">
+                        {CLARIFICATION_OPTIONS.map(opt => {
+                          const isActive = clarifications.has(opt.id);
+                          return (
+                            <button
+                              key={opt.id}
+                              data-testid={`clarification-${opt.id}`}
+                              onClick={() => toggleClarification(opt.id)}
+                              className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                                isActive
+                                  ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                                  : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
                     </div>
 
                     {/* Analyze button */}

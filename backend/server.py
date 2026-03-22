@@ -1109,6 +1109,21 @@ async def get_script(script_id: str):
     }
 
 
+# Curated default voices — available with any ElevenLabs API key
+DEFAULT_VOICES = [
+    {"voice_id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel", "gender": "female", "accent": "American", "style": "Calm, natural"},
+    {"voice_id": "pNInz6obpgDQGcFmaJgB", "name": "Adam", "gender": "male", "accent": "American", "style": "Deep, narration"},
+    {"voice_id": "EXAVITQu4vr4xnSDxMaL", "name": "Sarah", "gender": "female", "accent": "American", "style": "Soft, warm"},
+    {"voice_id": "cjVigY5qzO86Huf0OWal", "name": "Daniel", "gender": "male", "accent": "British", "style": "Authoritative"},
+    {"voice_id": "IKne3meq5aSn9XLyUdCD", "name": "Charlie", "gender": "male", "accent": "Australian", "style": "Casual, conversational"},
+    {"voice_id": "XB0fDUnXU5powFXDhCwa", "name": "Charlotte", "gender": "female", "accent": "English-Swedish", "style": "Dramatic, expressive"},
+    {"voice_id": "JBFqnCBsd6RMkjVDRZzb", "name": "George", "gender": "male", "accent": "British", "style": "Raspy, warm"},
+    {"voice_id": "ThT5KcBeYPX3keUQqHPh", "name": "Dorothy", "gender": "female", "accent": "British", "style": "Pleasant, clear"},
+    {"voice_id": "yoZ06aMxZJJ28mfd3POQ", "name": "Sam", "gender": "male", "accent": "American", "style": "Young, raspy"},
+    {"voice_id": "GBv7mTt0atIp3Br8iCZE", "name": "Thomas", "gender": "male", "accent": "American", "style": "Calm, measured"},
+]
+
+
 @api_router.get("/tts/status")
 async def tts_status():
     return {"available": eleven_client is not None}
@@ -1118,15 +1133,7 @@ async def tts_status():
 async def list_voices():
     if not eleven_client:
         return {"voices": [], "available": False}
-    try:
-        def _get():
-            resp = eleven_client.voices.get_all()
-            return [{"voice_id": v.voice_id, "name": v.name, "category": getattr(v, 'category', 'unknown')} for v in resp.voices[:15]]
-        voices = await asyncio.to_thread(_get)
-        return {"voices": voices, "available": True}
-    except Exception as e:
-        logger.error(f"Error fetching voices: {e}")
-        return {"voices": [], "available": False}
+    return {"voices": DEFAULT_VOICES, "available": True}
 
 
 @api_router.post("/tts/generate")

@@ -16,6 +16,8 @@ import {
   VolumeX,
   Clock,
   Loader2,
+  ChevronDown,
+  User,
 } from "lucide-react";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -39,6 +41,7 @@ export default function SceneReader({
   memorization,
   characterName,
   ttsAvailable,
+  voices = [],
   onClose,
 }) {
   const [currentCue, setCurrentCue] = useState(-1);
@@ -46,6 +49,8 @@ export default function SceneReader({
   const [isGenerating, setIsGenerating] = useState(false);
   const [pauseDuration, setPauseDuration] = useState(4);
   const [showYourLine, setShowYourLine] = useState(false);
+  const [selectedVoice, setSelectedVoice] = useState(null);
+  const [showVoicePicker, setShowVoicePicker] = useState(false);
   const audioRef = useRef(null);
   const abortRef = useRef(false);
   const timeoutRef = useRef(null);
@@ -82,7 +87,9 @@ export default function SceneReader({
     if (!ttsAvailable) return false;
     setIsGenerating(true);
     try {
-      const response = await axios.post(`${API}/tts/generate`, { text }, { timeout: 30000 });
+      const payload = { text };
+      if (selectedVoice) payload.voice_id = selectedVoice;
+      const response = await axios.post(`${API}/tts/generate`, payload, { timeout: 30000 });
       if (abortRef.current) { setIsGenerating(false); return false; }
 
       const audioUrl = response.data.audio_url;
@@ -125,7 +132,7 @@ export default function SceneReader({
       setIsGenerating(false);
       return false;
     }
-  }, [ttsAvailable]);
+  }, [ttsAvailable, selectedVoice]);
 
   const waitForPause = useCallback(() => {
     return new Promise((resolve) => {
@@ -329,6 +336,50 @@ export default function SceneReader({
             </div>
           )}
         </div>
+
+        {/* Voice picker */}
+        {ttsAvailable && voices.length > 0 && (
+          <div className="max-w-2xl mx-auto mt-3 relative">
+            <button
+              data-testid="voice-picker-toggle"
+              onClick={() => setShowVoicePicker(!showVoicePicker)}
+              disabled={isPlaying}
+              className="flex items-center gap-2 text-xs text-zinc-400 hover:text-zinc-200 transition-colors disabled:opacity-40"
+            >
+              <User className="w-3 h-3" />
+              <span>{selectedVoice ? voices.find(v => v.voice_id === selectedVoice)?.name || "Custom" : "Rachel (default)"}</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${showVoicePicker ? 'rotate-180' : ''}`} />
+            </button>
+
+            {showVoicePicker && !isPlaying && (
+              <div
+                data-testid="voice-picker-list"
+                className="absolute top-full left-0 mt-1 w-72 max-h-52 overflow-y-auto bg-zinc-900 border border-zinc-800 rounded-lg shadow-xl z-50"
+              >
+                {voices.map((v) => (
+                  <button
+                    key={v.voice_id}
+                    data-testid={`voice-option-${v.voice_id}`}
+                    onClick={() => { setSelectedVoice(v.voice_id); setShowVoicePicker(false); }}
+                    className={`w-full text-left px-3 py-2 flex items-center gap-3 hover:bg-zinc-800 transition-colors ${
+                      selectedVoice === v.voice_id ? 'bg-zinc-800/60' : ''
+                    }`}
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className={`text-sm font-medium ${selectedVoice === v.voice_id ? 'text-emerald-400' : 'text-zinc-200'}`}>
+                        {v.name}
+                      </p>
+                      <p className="text-[10px] text-zinc-500">{v.gender} · {v.accent} · {v.style}</p>
+                    </div>
+                    {selectedVoice === v.voice_id && (
+                      <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Progress indicator */}
