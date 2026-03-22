@@ -1,0 +1,74 @@
+{
+  "summary": "Comprehensive testing of Full Script Mode feature. All 15 backend tests passed (100%). All frontend Playwright tests passed - Full Script flow (paste script > enter character > find scenes > select scenes > batch analyze), ScriptOverview with scene tabs and navigation, 'Go Deeper' button visibility logic, and regression tests for existing Paste/Upload sides flows.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/parse-scenes with INT./EXT. headers correctly splits into 3 scenes",
+    "Backend: POST /api/parse-scenes correctly detects Sarah in 2 scenes (Kitchen, Apartment)",
+    "Backend: POST /api/parse-scenes correctly detects John in 2 scenes (Kitchen, Parking)",
+    "Backend: POST /api/parse-scenes correctly detects Mike in 1 scene (Parking only)",
+    "Backend: POST /api/parse-scenes returns 400 for empty text",
+    "Backend: POST /api/parse-scenes returns 400 for empty character name",
+    "Backend: POST /api/parse-scenes uses GPT fallback for scripts without standard headers",
+    "Backend: POST /api/analyze/batch with 1 scene returns breakdown with script_id",
+    "Backend: POST /api/analyze/batch with 2 scenes returns 2 breakdowns sharing same script_id",
+    "Backend: POST /api/analyze/batch returns 400 for empty scenes list",
+    "Backend: POST /api/analyze/batch returns 400 for >20 scenes",
+    "Backend: GET /api/scripts/{script_id} returns script metadata with all linked breakdowns",
+    "Backend: GET /api/scripts/{nonexistent} returns 404",
+    "Backend: POST /api/analyze/text (Quick mode) still works (regression)",
+    "Backend: POST /api/analyze/text (Deep mode) still works (regression)",
+    "Frontend: Upload page shows 3 input options (Paste sides, Upload sides, Full Script)",
+    "Frontend: Clicking 'Full Script' navigates to Step 2 with large textarea",
+    "Frontend: Step 2 shows 'Continue' button after pasting script",
+    "Frontend: Step 3 shows character name input with 'Find My Scenes' button",
+    "Frontend: Step 3 shows Quick/Deep mode toggle for Full Script",
+    "Frontend: After finding scenes, Step 4 shows selectable scene list",
+    "Frontend: Scene list shows scene headings, previews, character badges",
+    "Frontend: 'YOUR SCENE' tags appear on scenes containing the character",
+    "Frontend: 'Break Down N Scenes' button shows correct count",
+    "Frontend: Batch analysis completes and shows ScriptOverview",
+    "Frontend: ScriptOverview shows scene tabs for navigation",
+    "Frontend: ScriptOverview shows Prev/Next buttons and scene counter",
+    "Frontend: Scene navigation via tabs and buttons works correctly",
+    "Frontend: 'Go Deeper' button appears on Quick mode breakdowns",
+    "Frontend: 'Go Deeper' button is HIDDEN on Deep mode breakdowns",
+    "Frontend: DEEP badge visible in header for Deep mode breakdowns",
+    "Frontend: Emotional Arc and What They Hide cards visible in Deep mode",
+    "Regression: Existing 'Paste sides' flow works correctly",
+    "Regression: Quick/Deep mode toggle works in Paste sides flow"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_full_script_mode.py",
+    "/app/test_reports/pytest/full_script_mode_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py lines 126-154: parse_scenes_regex() correctly handles INT./EXT. headers with fallback to numbered scenes",
+    "server.py lines 157-175: detect_characters_in_scene() properly identifies ALL CAPS character cues while filtering out scene headers",
+    "server.py lines 178-187: character_in_scene() checks both dialogue cues and text mentions (case-insensitive)",
+    "server.py lines 920-1001: /api/parse-scenes endpoint has proper validation and GPT fallback for non-standard scripts",
+    "server.py lines 1004-1089: /api/analyze/batch correctly links all breakdowns via script_id and handles failures gracefully",
+    "UploadPage.jsx: Full Script flow properly manages 4-step wizard state with scene selection",
+    "ScriptOverview.jsx: Scene tabs and navigation work correctly with AnimatePresence transitions",
+    "BreakdownView.jsx lines 245-278: 'Go Deeper' button correctly hidden when isDeep is true"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_full_script_mode.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "100% (all Full Script Mode features verified working)"
+  },
+  "seed_data_creation": "Used sample multi-scene script with 3 scenes (Kitchen, Parking Lot, Apartment) and characters SARAH, JOHN, MIKE for testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Full Script Mode feature fully tested and working. Key test data: Sample script with INT./EXT. headers, 3 scenes, Sarah appears in 2 scenes. Backend test file at /app/backend/tests/test_full_script_mode.py covers all new endpoints. Frontend flow: input-type-fullscript > fullscript-textarea > step-next-2-fullscript > character-name-input > find-scenes-button > scene-item-{n} > analyze-batch-button > script-overview with scene-tab-{n} navigation."
+}

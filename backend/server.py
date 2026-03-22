@@ -104,6 +104,111 @@ class TTSRequest(BaseModel):
     text: str
     voice_id: Optional[str] = None
 
+class ParseScenesRequest(BaseModel):
+    text: str
+    character_name: str
+
+class SceneInfo(BaseModel):
+    scene_number: int
+    heading: str
+    preview: str
+    characters: List[str]
+    text: str
+    has_character: bool
+
+class BatchAnalyzeRequest(BaseModel):
+    scenes: List[dict]  # [{scene_number, text, heading}]
+    character_name: str
+    mode: Optional[str] = "quick"
+
+
+# --- Scene Parsing ---
+def parse_scenes_regex(text: str) -> Optional[List[dict]]:
+    """Split script text into scenes using standard screenplay markers (INT./EXT.)."""
+    # Match scene headers: INT., EXT., INT/EXT., I/E. or numbered scenes
+    pattern = r'(?:^|\n)\s*((?:INT\.|EXT\.|INT/EXT\.|I/E\.)[\s\S]*?)(?=\n)'
+    headers = list(re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE))
+
+    if len(headers) < 2:
+        # Try numbered scenes: "SCENE 1", "Scene 1:", "1." at line start
+        pattern2 = r'(?:^|\n)\s*((?:SCENE\s+\d+|ACT\s+\w+)[\s\S]*?)(?=\n)'
+        headers = list(re.finditer(pattern2, text, re.IGNORECASE | re.MULTILINE))
+
+    if len(headers) < 2:
+        return None  # Need GPT fallback
+
+    scenes = []
+    for i, match in enumerate(headers):
+        start = match.start()
+        end = headers[i + 1].start() if i < len(headers) - 1 else len(text)
+        scene_text = text[start:end].strip()
+        heading = match.group(1).strip()
+        # Clean heading — take first line only
+        heading = heading.split('\n')[0].strip()
+        scenes.append({
+            "scene_number": i + 1,
+            "heading": heading,
+            "text": scene_text,
+        })
+
+    return scenes
+
+
+def detect_characters_in_scene(scene_text: str) -> List[str]:
+    """Detect character names from screenplay dialogue cues (ALL CAPS names on their own line)."""
+    lines = scene_text.split('\n')
+    characters = set()
+    skip_prefixes = ('INT', 'EXT', 'FADE', 'CUT TO', 'SCENE', 'ACT ', 'END ', 'CONTINUED', 'THE END', 'DISSOLVE')
+    for line in lines:
+        stripped = line.strip()
+        # Character cue: mostly uppercase, possibly with (V.O.) (O.S.) (CONT'D)
+        if not stripped or len(stripped) > 60:
+            continue
+        # Remove parentheticals
+        name_clean = re.sub(r'\s*\(.*?\)\s*', '', stripped).strip()
+        if not name_clean or len(name_clean) < 2:
+            continue
+        # Must be mostly uppercase letters/spaces
+        if name_clean.isupper() and re.match(r'^[A-Z][A-Z\s\'./-]+$', name_clean):
+            if not any(name_clean.startswith(p) for p in skip_prefixes):
+                characters.add(name_clean)
+    return sorted(characters)
+
+
+def character_in_scene(scene_text: str, character_name: str) -> bool:
+    """Check if a character appears in a scene (case-insensitive, checks dialogue cues and mentions)."""
+    name_upper = character_name.upper().strip()
+    characters = detect_characters_in_scene(scene_text)
+    # Direct match in character cues
+    for c in characters:
+        if name_upper in c or c in name_upper:
+            return True
+    # Fallback: search in full text
+    return bool(re.search(re.escape(character_name), scene_text, re.IGNORECASE))
+
+
+SCENE_SPLIT_PROMPT = """You are a script parser. Given a full screenplay or script, split it into individual scenes.
+
+RULES:
+1. Each scene is a continuous block of action in one location/time.
+2. A new scene starts when there's a clear change of location, time, or dramatic unit.
+3. If there are INT./EXT. headers, use those as scene boundaries.
+4. If there are no standard headers, identify natural scene breaks.
+
+You MUST respond with valid JSON only. No markdown.
+
+Return this exact structure:
+{
+  "scenes": [
+    {
+      "scene_number": 1,
+      "heading": "Scene heading or brief location/context",
+      "text": "Full text of this scene including dialogue and directions"
+    }
+  ]
+}"""
+
+
 # --- Prompts ---
 QUICK_SYSTEM_PROMPT = """You are a working actor's script analyst. You break down audition sides into immediately playable notes. Everything you say must be PROVABLE from the text on the page.
 
@@ -808,6 +913,200 @@ async def get_breakdown(breakdown_id: str):
 async def list_breakdowns():
     results = await db.breakdowns.find({}, {"_id": 0}).sort("created_at", -1).to_list(50)
     return results
+
+
+# --- Full Script: Scene Parsing & Batch Analysis ---
+
+@api_router.post("/parse-scenes")
+async def parse_scenes(request: ParseScenesRequest):
+    """Parse a full script into scenes and identify which ones contain the specified character."""
+    if not request.text.strip():
+        raise HTTPException(status_code=400, detail="Script text cannot be empty")
+    if not request.character_name.strip():
+        raise HTTPException(status_code=400, detail="Character name is required")
+
+    character_name = request.character_name.strip()
+    script_text = request.text.strip()
+    logger.info(f"[parse-scenes] Parsing {len(script_text)} chars for character: {character_name}")
+
+    # Step 1: Try regex-based scene splitting
+    scenes = parse_scenes_regex(script_text)
+
+    # Step 2: If regex fails, use GPT to split
+    if not scenes:
+        logger.info("[parse-scenes] Regex found <2 scenes, using GPT fallback")
+        try:
+            api_key = os.environ.get('EMERGENT_LLM_KEY')
+            if not api_key:
+                raise Exception("LLM API key not configured")
+
+            # Truncate for GPT if very long
+            gpt_text = script_text[:15000] if len(script_text) > 15000 else script_text
+
+            chat = LlmChat(
+                api_key=api_key,
+                session_id=str(uuid.uuid4()),
+                system_message=SCENE_SPLIT_PROMPT
+            ).with_model("openai", "gpt-5.2")
+
+            response = await asyncio.wait_for(
+                chat.send_message(UserMessage(text=f"Split this script into scenes:\n\n{gpt_text}")),
+                timeout=60
+            )
+            parsed = parse_json_response(response)
+            scenes = parsed.get("scenes", [])
+            # Ensure scene_number is set
+            for i, s in enumerate(scenes):
+                s.setdefault("scene_number", i + 1)
+                s.setdefault("heading", f"Scene {i + 1}")
+        except Exception as e:
+            logger.error(f"[parse-scenes] GPT fallback failed: {e}")
+            # Last resort: treat entire text as one scene
+            scenes = [{
+                "scene_number": 1,
+                "heading": "Full Script",
+                "text": script_text,
+            }]
+
+    # Step 3: Enrich each scene with character detection and preview
+    enriched = []
+    for scene in scenes:
+        scene_text = scene.get("text", "")
+        characters = detect_characters_in_scene(scene_text)
+        has_char = character_in_scene(scene_text, character_name)
+
+        # Generate preview: first 2 lines of dialogue or text, max 150 chars
+        lines = [l.strip() for l in scene_text.split('\n') if l.strip()]
+        preview_lines = lines[1:4] if len(lines) > 1 else lines[:3]  # Skip heading
+        preview = ' / '.join(preview_lines)[:150]
+
+        enriched.append({
+            "scene_number": scene.get("scene_number", 0),
+            "heading": scene.get("heading", f"Scene {scene.get('scene_number', '?')}"),
+            "preview": preview,
+            "characters": characters,
+            "text": scene_text,
+            "has_character": has_char,
+            "line_count": len(lines),
+        })
+
+    character_scenes = [s for s in enriched if s["has_character"]]
+    logger.info(f"[parse-scenes] Found {len(enriched)} total scenes, {len(character_scenes)} with {character_name}")
+
+    return {
+        "total_scenes": len(enriched),
+        "character_scenes_count": len(character_scenes),
+        "character_name": character_name,
+        "scenes": enriched,
+    }
+
+
+@api_router.post("/analyze/batch")
+async def analyze_batch(request: BatchAnalyzeRequest):
+    """Analyze multiple scenes from a full script. Returns all breakdowns linked by script_id."""
+    if not request.scenes:
+        raise HTTPException(status_code=400, detail="No scenes provided")
+    if len(request.scenes) > 20:
+        raise HTTPException(status_code=400, detail="Maximum 20 scenes per batch")
+
+    character_name = request.character_name.strip()
+    mode = request.mode or "quick"
+    script_id = str(uuid.uuid4())
+    logger.info(f"[analyze/batch] {len(request.scenes)} scenes, mode={mode}, character={character_name}, script_id={script_id}")
+
+    breakdowns = []
+    for i, scene in enumerate(request.scenes):
+        scene_text = scene.get("text", "")
+        scene_heading = scene.get("heading", f"Scene {scene.get('scene_number', i + 1)}")
+        scene_number = scene.get("scene_number", i + 1)
+
+        if not scene_text.strip():
+            continue
+
+        # Prepend character context so GPT focuses on the right character
+        analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {scene_heading}]\n\n{scene_text}"
+
+        logger.info(f"[analyze/batch] Analyzing scene {scene_number}/{len(request.scenes)}: {scene_heading}")
+
+        try:
+            gpt_timeout = 120 if mode == "deep" else 90
+            result, raw = await asyncio.wait_for(
+                analyze_with_gpt(text=analysis_text, mode=mode),
+                timeout=gpt_timeout
+            )
+
+            breakdown_id = str(uuid.uuid4())
+            doc = {
+                "id": breakdown_id,
+                "script_id": script_id,
+                "scene_number": scene_number,
+                "scene_heading": scene_heading,
+                "original_text": scene_text,
+                "mode": mode,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                **result
+            }
+            await db.breakdowns.insert_one(doc)
+            stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+            breakdowns.append(stored)
+
+        except Exception as e:
+            logger.error(f"[analyze/batch] Scene {scene_number} failed: {e}")
+            # Add a placeholder so the user knows this scene failed
+            breakdowns.append({
+                "id": str(uuid.uuid4()),
+                "script_id": script_id,
+                "scene_number": scene_number,
+                "scene_heading": scene_heading,
+                "original_text": scene_text,
+                "mode": mode,
+                "created_at": datetime.now(timezone.utc).isoformat(),
+                "scene_summary": f"Analysis failed for this scene: {str(e)[:100]}",
+                "character_name": character_name,
+                "character_objective": "", "stakes": "",
+                "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
+                "memorization": {"chunked_lines": [], "cue_recall": []},
+                "self_tape_tips": {"framing": "", "eyeline": "", "tone_energy": ""},
+                "_debug": {"fallback": True, "reason": str(e)},
+            })
+
+    # Save script metadata
+    script_doc = {
+        "id": script_id,
+        "character_name": character_name,
+        "mode": mode,
+        "scene_count": len(breakdowns),
+        "breakdown_ids": [b["id"] for b in breakdowns],
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.scripts.insert_one(script_doc)
+
+    return {
+        "script_id": script_id,
+        "character_name": character_name,
+        "mode": mode,
+        "breakdowns": breakdowns,
+    }
+
+
+@api_router.get("/scripts/{script_id}")
+async def get_script(script_id: str):
+    """Retrieve a full script analysis with all its scene breakdowns."""
+    script = await db.scripts.find_one({"id": script_id}, {"_id": 0})
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    breakdown_ids = script.get("breakdown_ids", [])
+    breakdowns = []
+    for bid in breakdown_ids:
+        b = await db.breakdowns.find_one({"id": bid}, {"_id": 0})
+        if b:
+            breakdowns.append(b)
+
+    return {
+        **script,
+        "breakdowns": breakdowns,
+    }
 
 
 @api_router.get("/tts/status")

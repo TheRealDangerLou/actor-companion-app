@@ -5,7 +5,9 @@ import { Button } from "@/components/ui/button";
 import {
   Upload, FileText, Image, Sparkles, ArrowRight, ArrowLeft, Camera,
   ChevronDown, ChevronUp, Layers, Clock, Type, ImageIcon, CameraIcon,
+  ScrollText, User, Search, Check, CheckSquare, Square, Loader2,
 } from "lucide-react";
+import axios from "axios";
 
 const HERO_BG = "https://images.unsplash.com/photo-1761229660731-891484da5c35?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2OTV8MHwxfHNlYXJjaHw0fHx0aGVhdGVyJTIwc3RhZ2UlMjBzcG90bGlnaHQlMjBkYXJrfGVufDB8fHx8MTc3Mzg4ODc2Mnww&ixlib=rb-4.1.0&q=85&w=1920";
 
@@ -26,9 +28,9 @@ const stepAnim = {
   transition: { duration: 0.2 },
 };
 
-export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdown }) {
+export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreakdowns, onLoadBreakdown }) {
   const [step, setStep] = useState(1);
-  const [inputType, setInputType] = useState(null); // "text" | "file" | "snap"
+  const [inputType, setInputType] = useState(null); // "text" | "file" | "snap" | "fullscript"
   const [scriptText, setScriptText] = useState("");
   const [imageFile, setImageFile] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
@@ -38,6 +40,15 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
+
+  // Full Script mode state
+  const [fullScriptText, setFullScriptText] = useState("");
+  const [fullScriptFile, setFullScriptFile] = useState(null);
+  const [characterName, setCharacterName] = useState("");
+  const [isParsing, setIsParsing] = useState(false);
+  const [parsedScenes, setParsedScenes] = useState(null);
+  const [selectedScenes, setSelectedScenes] = useState(new Set());
+  const fullScriptFileRef = useRef(null);
 
   const handleFileChange = useCallback((e) => {
     const file = e?.target?.files?.[0];
@@ -79,6 +90,101 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
     setImageFile(null);
     setImagePreview(null);
   }, []);
+
+  // --- Full Script Helpers ---
+  const handleFullScriptFile = useCallback((e) => {
+    const file = e?.target?.files?.[0];
+    if (!file) return;
+    // Read text-based files directly
+    const name = file.name.toLowerCase();
+    if (name.endsWith('.txt') || name.endsWith('.pdf')) {
+      setFullScriptFile(file);
+    } else {
+      toast.error("For Full Script mode, upload a .txt or .pdf file.");
+    }
+    e.target.value = "";
+  }, []);
+
+  const handleParseScenes = useCallback(async () => {
+    let textToparse = fullScriptText.trim();
+
+    // If a PDF file was uploaded, use the analyze/image endpoint to extract text first
+    if (fullScriptFile && !textToparse) {
+      toast.error("Please paste your script text for Full Script mode.");
+      return;
+    }
+
+    if (textToparse.length < 50) {
+      toast.error("Please paste more of the script for scene detection.");
+      return;
+    }
+    if (!characterName.trim()) {
+      toast.error("Enter your character name to find your scenes.");
+      return;
+    }
+
+    setIsParsing(true);
+    try {
+      const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+      const response = await axios.post(`${API}/parse-scenes`, {
+        text: textToparse,
+        character_name: characterName.trim(),
+      }, { timeout: 60000 });
+
+      const data = response.data;
+      setParsedScenes(data);
+
+      // Auto-select all scenes that contain the character
+      const charSceneNums = new Set(
+        data.scenes.filter(s => s.has_character).map(s => s.scene_number)
+      );
+      setSelectedScenes(charSceneNums);
+
+      if (data.character_scenes_count === 0) {
+        toast.info(`No scenes found for "${characterName}". Try a different name or check spelling.`);
+      } else {
+        toast.success(`Found ${data.character_scenes_count} scene${data.character_scenes_count > 1 ? 's' : ''} with ${characterName}.`);
+      }
+
+      setStep(4); // Move to scene selection
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || "Failed to parse scenes";
+      toast.error(msg);
+    }
+    setIsParsing(false);
+  }, [fullScriptText, fullScriptFile, characterName]);
+
+  const toggleScene = useCallback((sceneNum) => {
+    setSelectedScenes(prev => {
+      const next = new Set(prev);
+      if (next.has(sceneNum)) next.delete(sceneNum);
+      else next.add(sceneNum);
+      return next;
+    });
+  }, []);
+
+  const toggleAllCharScenes = useCallback(() => {
+    if (!parsedScenes) return;
+    const charSceneNums = parsedScenes.scenes.filter(s => s.has_character).map(s => s.scene_number);
+    const allSelected = charSceneNums.every(n => selectedScenes.has(n));
+    if (allSelected) {
+      setSelectedScenes(new Set());
+    } else {
+      setSelectedScenes(new Set(charSceneNums));
+    }
+  }, [parsedScenes, selectedScenes]);
+
+  const handleFullScriptSubmit = useCallback(() => {
+    if (!parsedScenes || selectedScenes.size === 0) return;
+    const scenesToAnalyze = parsedScenes.scenes.filter(s => selectedScenes.has(s.scene_number));
+    if (onFullScriptAnalyze) {
+      onFullScriptAnalyze({
+        scenes: scenesToAnalyze,
+        character_name: characterName.trim(),
+        mode,
+      });
+    }
+  }, [parsedScenes, selectedScenes, characterName, mode, onFullScriptAnalyze]);
 
   const buildContextString = () => {
     const parts = [];
@@ -151,7 +257,7 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
         >
           {/* Step indicator */}
           <div className="flex items-center gap-1.5 mb-5">
-            {[1, 2, 3].map((s) => (
+            {(inputType === "fullscript" ? [1, 2, 3, 4] : [1, 2, 3]).map((s) => (
               <div
                 key={s}
                 className={`h-1 rounded-full transition-all duration-300 ${
@@ -175,7 +281,7 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
                     }`}
                   >
                     <Type className="w-6 h-6 text-amber-500/70" />
-                    <span className="text-sm text-zinc-300 font-medium">Paste script</span>
+                    <span className="text-sm text-zinc-300 font-medium">Paste sides</span>
                   </button>
                   <button
                     data-testid="input-type-file"
@@ -185,7 +291,18 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
                     }`}
                   >
                     <Upload className="w-6 h-6 text-amber-500/70" />
-                    <span className="text-sm text-zinc-300 font-medium">Upload file</span>
+                    <span className="text-sm text-zinc-300 font-medium">Upload sides</span>
+                  </button>
+                  <button
+                    data-testid="input-type-fullscript"
+                    onClick={() => selectInputType("fullscript")}
+                    className={`flex flex-col items-center gap-2 p-5 rounded-lg border transition-all hover:border-zinc-600 col-span-2 ${
+                      inputType === "fullscript" ? "border-amber-500/50 bg-amber-500/5" : "border-zinc-800 bg-zinc-900/30"
+                    }`}
+                  >
+                    <ScrollText className="w-6 h-6 text-amber-500/70" />
+                    <span className="text-sm text-zinc-300 font-medium">Full Script</span>
+                    <span className="text-[10px] text-zinc-500">Find & break down all your scenes</span>
                   </button>
                   <button
                     data-testid="input-type-snap"
@@ -280,7 +397,22 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
                   </div>
                 )}
 
-                {/* Mode toggle */}
+                {/* Full Script input */}
+                {inputType === "fullscript" && (
+                  <div>
+                    <textarea
+                      data-testid="fullscript-textarea"
+                      value={fullScriptText}
+                      onChange={(e) => setFullScriptText(e.target.value)}
+                      placeholder={"Paste the full script here...\n\nINT. KITCHEN - DAY\n\nSARAH sits at the table.\n\nJOHN\nWe need to talk.\n\n...\n\nEXT. PARKING LOT - NIGHT\n\nJOHN walks to his car..."}
+                      className="w-full h-56 md:h-64 bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 font-script text-base text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none resize-none transition-colors"
+                    />
+                    <p className="text-xs text-zinc-600 mt-1.5">Paste the full screenplay or script — we'll find your scenes</p>
+                  </div>
+                )}
+
+                {/* Mode toggle — only for non-fullscript modes */}
+                {inputType !== "fullscript" && (
                 <div className="mt-5 flex items-center gap-3" data-testid="mode-toggle">
                   <button
                     onClick={() => setMode("quick")}
@@ -313,9 +445,23 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
                     <p className="text-[10px] mt-0.5 opacity-70">~30s &middot; full breakdown</p>
                   </button>
                 </div>
+                )}
 
                 {/* Next or Analyze */}
-                {hasInput ? (
+                {inputType === "fullscript" ? (
+                  fullScriptText.trim().length >= 50 ? (
+                    <Button
+                      data-testid="step-next-2-fullscript"
+                      onClick={() => goToStep(3)}
+                      className="w-full mt-5 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press transition-colors gap-2"
+                    >
+                      Continue
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-zinc-600 text-center mt-5">Paste the full script to continue</p>
+                  )
+                ) : hasInput ? (
                   <Button
                     data-testid="step-next-2"
                     onClick={() => goToStep(3)}
@@ -332,7 +478,7 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
               </motion.div>
             )}
 
-            {/* ===== STEP 3: Context + Launch ===== */}
+            {/* ===== STEP 3: Context + Launch (Sides) OR Character Name (Full Script) ===== */}
             {step === 3 && (
               <motion.div key="step3" {...stepAnim}>
                 {/* Back */}
@@ -344,98 +490,300 @@ export default function UploadPage({ onAnalyze, recentBreakdowns, onLoadBreakdow
                   <ArrowLeft className="w-3 h-3" /> Back
                 </button>
 
-                {/* Summary */}
-                <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-lg p-4 mb-5">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      {inputType === "text" ? <Type className="w-4 h-4 text-zinc-500" /> : inputType === "snap" ? <Camera className="w-4 h-4 text-zinc-500" /> : <Upload className="w-4 h-4 text-zinc-500" />}
-                      <span className="text-sm text-zinc-400">
-                        {inputType === "text"
-                          ? `${scriptText.trim().split("\n").length} lines`
-                          : imageFile?.name || "Photo"}
-                      </span>
+                {inputType === "fullscript" ? (
+                  /* --- Full Script: Character Name + Find Scenes --- */
+                  <div>
+                    <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-lg p-4 mb-5">
+                      <div className="flex items-center gap-2">
+                        <ScrollText className="w-4 h-4 text-zinc-500" />
+                        <span className="text-sm text-zinc-400">
+                          {fullScriptText.trim().split("\n").length} lines pasted
+                        </span>
+                      </div>
                     </div>
-                    <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
-                      mode === "deep" ? "text-amber-500 border-amber-500/30 bg-amber-500/10" : "text-zinc-400 border-zinc-700 bg-zinc-800/30"
-                    }`}>
-                      {mode === "deep" ? "Deep" : "Quick"}
-                    </span>
+
+                    <div className="space-y-4">
+                      <div>
+                        <label className="text-sm text-zinc-400 mb-2 block font-medium">
+                          Who are you playing?
+                        </label>
+                        <div className="relative">
+                          <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-600" />
+                          <input
+                            data-testid="character-name-input"
+                            value={characterName}
+                            onChange={(e) => setCharacterName(e.target.value)}
+                            placeholder="e.g. Sarah, Felix, Dr. Chen"
+                            className="w-full bg-zinc-900/50 border border-zinc-800 rounded-lg pl-10 pr-4 py-3 text-base text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none transition-colors"
+                            onKeyDown={(e) => { if (e.key === 'Enter' && characterName.trim()) handleParseScenes(); }}
+                          />
+                        </div>
+                        <p className="text-xs text-zinc-600 mt-1.5">
+                          We'll find every scene this character appears in
+                        </p>
+                      </div>
+
+                      {/* Mode toggle for full script */}
+                      <div className="flex items-center gap-3" data-testid="fullscript-mode-toggle">
+                        <button
+                          onClick={() => setMode("quick")}
+                          data-testid="fs-mode-quick"
+                          className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
+                            mode === "quick"
+                              ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+                              : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            <span>Quick</span>
+                          </div>
+                          <p className="text-[10px] mt-0.5 opacity-70">~15s per scene</p>
+                        </button>
+                        <button
+                          onClick={() => setMode("deep")}
+                          data-testid="fs-mode-deep"
+                          className={`flex-1 py-2 px-3 rounded-lg border text-sm font-medium transition-all ${
+                            mode === "deep"
+                              ? "border-amber-500/50 bg-amber-500/10 text-amber-500"
+                              : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:border-zinc-700"
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-2">
+                            <Layers className="w-3.5 h-3.5" />
+                            <span>Deep</span>
+                          </div>
+                          <p className="text-[10px] mt-0.5 opacity-70">~30s per scene</p>
+                        </button>
+                      </div>
+
+                      <Button
+                        data-testid="find-scenes-button"
+                        onClick={handleParseScenes}
+                        disabled={!characterName.trim() || isParsing}
+                        className="w-full h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
+                      >
+                        {isParsing ? (
+                          <>
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                            Finding scenes...
+                          </>
+                        ) : (
+                          <>
+                            <Search className="w-4 h-4" />
+                            Find My Scenes
+                          </>
+                        )}
+                      </Button>
+                    </div>
                   </div>
+                ) : (
+                  /* --- Sides: Context + Launch --- */
+                  <div>
+                    {/* Summary */}
+                    <div className="bg-zinc-900/40 border border-zinc-800/50 rounded-lg p-4 mb-5">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {inputType === "text" ? <Type className="w-4 h-4 text-zinc-500" /> : inputType === "snap" ? <Camera className="w-4 h-4 text-zinc-500" /> : <Upload className="w-4 h-4 text-zinc-500" />}
+                          <span className="text-sm text-zinc-400">
+                            {inputType === "text"
+                              ? `${scriptText.trim().split("\n").length} lines`
+                              : imageFile?.name || "Photo"}
+                          </span>
+                        </div>
+                        <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${
+                          mode === "deep" ? "text-amber-500 border-amber-500/30 bg-amber-500/10" : "text-zinc-400 border-zinc-700 bg-zinc-800/30"
+                        }`}>
+                          {mode === "deep" ? "Deep" : "Quick"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Context (optional) */}
+                    <div>
+                      <button
+                        onClick={() => setShowContext(!showContext)}
+                        className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors w-full"
+                        data-testid="toggle-context-button"
+                      >
+                        <span>{showContext ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</span>
+                        <span>Add context</span>
+                        <span className="text-xs text-zinc-600">(helps the AI go deeper)</span>
+                        {hasContext && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 ml-1" />}
+                      </button>
+
+                      <AnimatePresence>
+                        {showContext && (
+                          <motion.div
+                            initial={{ opacity: 0, height: 0 }}
+                            animate={{ opacity: 1, height: "auto" }}
+                            exit={{ opacity: 0, height: 0 }}
+                            transition={{ duration: 0.2 }}
+                            className="mt-3 space-y-3"
+                          >
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-xs text-zinc-500 mb-1 block">Character</label>
+                                <input
+                                  data-testid="context-character"
+                                  value={context.character}
+                                  onChange={(e) => setContext(c => ({ ...c, character: e.target.value }))}
+                                  placeholder="e.g. Sarah, the younger sister"
+                                  className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="text-xs text-zinc-500 mb-1 block">Project</label>
+                                <input
+                                  data-testid="context-synopsis"
+                                  value={context.synopsis}
+                                  onChange={(e) => setContext(c => ({ ...c, synopsis: e.target.value }))}
+                                  placeholder="e.g. Indie drama, estranged siblings"
+                                  className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                            <input
+                              data-testid="context-casting-notes"
+                              value={context.castingNotes}
+                              onChange={(e) => setContext(c => ({ ...c, castingNotes: e.target.value }))}
+                              placeholder="Casting notes — e.g. 'grounded, not melodramatic'"
+                              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
+                            />
+                            <textarea
+                              data-testid="context-character-desc"
+                              value={context.characterDesc}
+                              onChange={(e) => setContext(c => ({ ...c, characterDesc: e.target.value }))}
+                              placeholder="Character description — e.g. 'Late 20s, guarded but sharp.'"
+                              rows={2}
+                              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none resize-none"
+                            />
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+
+                    {/* Analyze button */}
+                    <Button
+                      data-testid="analyze-button"
+                      onClick={handleSubmit}
+                      disabled={!canSubmit}
+                      className="w-full mt-5 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
+                    >
+                      <Sparkles className="w-4 h-4" />
+                      {mode === "deep" ? "Deep Analysis" : "Analyze My Sides"}
+                      <ArrowRight className="w-4 h-4" />
+                    </Button>
+                  </div>
+                )}
+              </motion.div>
+            )}
+
+            {/* ===== STEP 4: Scene Selection (Full Script only) ===== */}
+            {step === 4 && inputType === "fullscript" && parsedScenes && (
+              <motion.div key="step4" {...stepAnim}>
+                <button
+                  data-testid="step-back-4"
+                  onClick={() => goToStep(3)}
+                  className="flex items-center gap-1 text-xs text-zinc-600 hover:text-zinc-400 mb-4 transition-colors"
+                >
+                  <ArrowLeft className="w-3 h-3" /> Back
+                </button>
+
+                {/* Summary header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-zinc-200">
+                      {parsedScenes.character_scenes_count} scene{parsedScenes.character_scenes_count !== 1 ? 's' : ''} found for {parsedScenes.character_name}
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-0.5">
+                      {parsedScenes.total_scenes} total scenes in script
+                    </p>
+                  </div>
+                  <button
+                    data-testid="toggle-all-scenes"
+                    onClick={toggleAllCharScenes}
+                    className="text-xs text-amber-500 hover:text-amber-400 transition-colors"
+                  >
+                    {parsedScenes.scenes.filter(s => s.has_character).every(s => selectedScenes.has(s.scene_number))
+                      ? "Deselect All" : "Select All"}
+                  </button>
                 </div>
 
-                {/* Context (optional) */}
-                <div>
-                  <button
-                    onClick={() => setShowContext(!showContext)}
-                    className="flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-300 transition-colors w-full"
-                    data-testid="toggle-context-button"
-                  >
-                    <span>{showContext ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}</span>
-                    <span>Add context</span>
-                    <span className="text-xs text-zinc-600">(helps the AI go deeper)</span>
-                    {hasContext && <span className="w-1.5 h-1.5 rounded-full bg-amber-500 ml-1" />}
-                  </button>
+                {/* Scene list */}
+                <div className="space-y-2 max-h-[320px] overflow-y-auto pr-1 -mr-1 custom-scrollbar">
+                  {parsedScenes.scenes.map((scene) => {
+                    const isSelected = selectedScenes.has(scene.scene_number);
+                    const isMyScene = scene.has_character;
 
-                  <AnimatePresence>
-                    {showContext && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.2 }}
-                        className="mt-3 space-y-3"
+                    return (
+                      <button
+                        key={scene.scene_number}
+                        data-testid={`scene-item-${scene.scene_number}`}
+                        onClick={() => toggleScene(scene.scene_number)}
+                        className={`w-full text-left rounded-lg border p-3 transition-all ${
+                          isSelected
+                            ? "border-amber-500/40 bg-amber-500/5"
+                            : isMyScene
+                            ? "border-zinc-700 bg-zinc-900/30 hover:border-zinc-600"
+                            : "border-zinc-800/40 bg-zinc-950/20 opacity-50"
+                        }`}
                       >
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          <div>
-                            <label className="text-xs text-zinc-500 mb-1 block">Character</label>
-                            <input
-                              data-testid="context-character"
-                              value={context.character}
-                              onChange={(e) => setContext(c => ({ ...c, character: e.target.value }))}
-                              placeholder="e.g. Sarah, the younger sister"
-                              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
-                            />
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5 shrink-0">
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-amber-500" />
+                            ) : (
+                              <Square className="w-4 h-4 text-zinc-600" />
+                            )}
                           </div>
-                          <div>
-                            <label className="text-xs text-zinc-500 mb-1 block">Project</label>
-                            <input
-                              data-testid="context-synopsis"
-                              value={context.synopsis}
-                              onChange={(e) => setContext(c => ({ ...c, synopsis: e.target.value }))}
-                              placeholder="e.g. Indie drama, estranged siblings"
-                              className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
-                            />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-xs font-mono text-zinc-500">#{scene.scene_number}</span>
+                              <span className="text-sm text-zinc-200 font-medium truncate">{scene.heading}</span>
+                              {isMyScene && (
+                                <span className="text-[9px] text-amber-500 border border-amber-500/20 rounded px-1 shrink-0">
+                                  YOUR SCENE
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-zinc-500 line-clamp-2">{scene.preview}</p>
+                            {scene.characters.length > 0 && (
+                              <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
+                                {scene.characters.slice(0, 6).map(c => (
+                                  <span
+                                    key={c}
+                                    className={`text-[10px] px-1.5 py-0.5 rounded border ${
+                                      c.toUpperCase().includes(characterName.toUpperCase())
+                                        ? "text-amber-500 border-amber-500/20 bg-amber-500/5"
+                                        : "text-zinc-500 border-zinc-800 bg-zinc-900/30"
+                                    }`}
+                                  >
+                                    {c}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                           </div>
                         </div>
-                        <input
-                          data-testid="context-casting-notes"
-                          value={context.castingNotes}
-                          onChange={(e) => setContext(c => ({ ...c, castingNotes: e.target.value }))}
-                          placeholder="Casting notes — e.g. 'grounded, not melodramatic'"
-                          className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none"
-                        />
-                        <textarea
-                          data-testid="context-character-desc"
-                          value={context.characterDesc}
-                          onChange={(e) => setContext(c => ({ ...c, characterDesc: e.target.value }))}
-                          placeholder="Character description — e.g. 'Late 20s, guarded but sharp.'"
-                          rows={2}
-                          className="w-full bg-zinc-900/50 border border-zinc-800 rounded-md px-3 py-2 text-sm text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:outline-none resize-none"
-                        />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {/* Analyze button */}
+                {/* Analyze selected */}
                 <Button
-                  data-testid="analyze-button"
-                  onClick={handleSubmit}
-                  disabled={!canSubmit}
+                  data-testid="analyze-batch-button"
+                  onClick={handleFullScriptSubmit}
+                  disabled={selectedScenes.size === 0}
                   className="w-full mt-5 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
                 >
                   <Sparkles className="w-4 h-4" />
-                  {mode === "deep" ? "Deep Analysis" : "Analyze My Sides"}
+                  {selectedScenes.size === 0
+                    ? "Select scenes to analyze"
+                    : selectedScenes.size === 1
+                    ? `Analyze 1 Scene (${mode === 'deep' ? 'Deep' : 'Quick'})`
+                    : `Break Down ${selectedScenes.size} Scenes (${mode === 'deep' ? 'Deep' : 'Quick'})`}
                   <ArrowRight className="w-4 h-4" />
                 </Button>
               </motion.div>

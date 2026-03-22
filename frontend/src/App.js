@@ -9,19 +9,23 @@ import UploadPage from "@/components/UploadPage";
 import BreakdownView from "@/components/BreakdownView";
 import MemorizationMode from "@/components/MemorizationMode";
 import SceneReader from "@/components/SceneReader";
+import ScriptOverview from "@/components/ScriptOverview";
 import LoadingScreen from "@/components/LoadingScreen";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function MainApp() {
-  const [view, setView] = useState("upload");
+  const [view, setView] = useState("upload"); // "upload" | "breakdown" | "script"
   const [breakdown, setBreakdown] = useState(null);
+  const [scriptData, setScriptData] = useState(null); // {script_id, character_name, mode, breakdowns}
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("quick");
   const [memorizationOpen, setMemorizationOpen] = useState(false);
   const [sceneReaderOpen, setSceneReaderOpen] = useState(false);
   const [ttsAvailable, setTtsAvailable] = useState(false);
   const [recentBreakdowns, setRecentBreakdowns] = useState([]);
+  // Track active breakdown for memorization/scene reader in script mode
+  const [activeScriptBreakdown, setActiveScriptBreakdown] = useState(null);
 
   useEffect(() => {
     axios.get(`${API}/tts/status`).then(r => setTtsAvailable(r.data.available)).catch(() => {});
@@ -120,9 +124,54 @@ function MainApp() {
     });
   }, [breakdown]);
 
+  const handleReanalyzeDeep = useCallback(async () => {
+    if (!breakdown?.original_text) {
+      toast.error("Original script text not available for re-analysis.");
+      return;
+    }
+    handleAnalyze({ type: "text", text: breakdown.original_text, mode: "deep" });
+  }, [breakdown, handleAnalyze]);
+
   const handleNewAnalysis = useCallback(() => {
     setView("upload");
     setBreakdown(null);
+    setScriptData(null);
+    setActiveScriptBreakdown(null);
+  }, []);
+
+  const handleFullScriptAnalyze = useCallback(async (data) => {
+    // data = { scenes: [...], character_name, mode }
+    setLoading(true);
+    setLoadingMode(data.mode || "quick");
+    try {
+      const response = await axios.post(`${API}/analyze/batch`, {
+        scenes: data.scenes.map(s => ({
+          scene_number: s.scene_number,
+          text: s.text,
+          heading: s.heading,
+        })),
+        character_name: data.character_name,
+        mode: data.mode || "quick",
+      }, { timeout: data.scenes.length * 120000 }); // ~2min per scene max
+
+      const result = response.data;
+      setScriptData(result);
+      setView("script");
+      toast.success(`${result.breakdowns.length} scene${result.breakdowns.length > 1 ? 's' : ''} analyzed. Time to prep.`);
+      // Refresh recent list
+      axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
+    } catch (error) {
+      let msg;
+      if (error.code === "ECONNABORTED" || error.message?.includes("timeout")) {
+        msg = "Request timed out. Try fewer scenes or Quick mode.";
+      } else if (!error.response) {
+        msg = `Network error — check your connection.`;
+      } else {
+        msg = error.response?.data?.detail || `Server error (${error.response.status})`;
+      }
+      toast.error(msg, { duration: 8000 });
+    }
+    setLoading(false);
   }, []);
 
   const handleLoadBreakdown = useCallback(async (id) => {
@@ -147,7 +196,7 @@ function MainApp() {
         )}
         {!loading && view === "upload" && (
           <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-            <UploadPage onAnalyze={handleAnalyze} recentBreakdowns={recentBreakdowns} onLoadBreakdown={handleLoadBreakdown} />
+            <UploadPage onAnalyze={handleAnalyze} onFullScriptAnalyze={handleFullScriptAnalyze} recentBreakdowns={recentBreakdowns} onLoadBreakdown={handleLoadBreakdown} />
           </motion.div>
         )}
         {!loading && view === "breakdown" && breakdown && (
@@ -155,6 +204,7 @@ function MainApp() {
             <BreakdownView
               breakdown={breakdown}
               onRegenerate={handleRegenerateTakes}
+              onReanalyzeDeep={handleReanalyzeDeep}
               onExportPdf={handleExportPdf}
               onNewAnalysis={handleNewAnalysis}
               onOpenMemorization={() => setMemorizationOpen(true)}
@@ -164,25 +214,56 @@ function MainApp() {
             />
           </motion.div>
         )}
+        {!loading && view === "script" && scriptData && (
+          <motion.div key="script" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
+            <ScriptOverview
+              scriptData={scriptData}
+              ttsAvailable={ttsAvailable}
+              onNewAnalysis={handleNewAnalysis}
+              onOpenMemorization={(b) => { setActiveScriptBreakdown(b); setMemorizationOpen(true); }}
+              onOpenSceneReader={(b) => { setActiveScriptBreakdown(b); setSceneReaderOpen(true); }}
+              onExportPdf={(id) => window.open(`${API}/export-pdf/${id}`, "_blank")}
+              onShare={(id) => {
+                const url = `${window.location.origin}/share/${id}`;
+                navigator.clipboard.writeText(url).then(() => toast.success("Share link copied")).catch(() => toast.info(url));
+              }}
+              onRegenerate={async (id) => {
+                try {
+                  toast.loading("Generating new takes...", { id: "regen" });
+                  const resp = await axios.post(`${API}/regenerate-takes/${id}`);
+                  setScriptData(prev => ({
+                    ...prev,
+                    breakdowns: prev.breakdowns.map(b => b.id === id ? resp.data : b),
+                  }));
+                  toast.success("Fresh takes ready.", { id: "regen" });
+                } catch { toast.error("Failed to regenerate.", { id: "regen" }); }
+              }}
+              onReanalyzeDeep={async (b) => {
+                if (!b?.original_text) return;
+                handleAnalyze({ type: "text", text: `[CHARACTER TO ANALYZE: ${scriptData.character_name}]\n[SCENE: ${b.scene_heading || ''}]\n\n${b.original_text}`, mode: "deep" });
+              }}
+            />
+          </motion.div>
+        )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {memorizationOpen && breakdown && (
+        {memorizationOpen && (breakdown || activeScriptBreakdown) && (
           <MemorizationMode
-            memorization={breakdown.memorization}
-            characterName={breakdown.character_name}
-            onClose={() => setMemorizationOpen(false)}
+            memorization={(activeScriptBreakdown || breakdown).memorization}
+            characterName={(activeScriptBreakdown || breakdown).character_name}
+            onClose={() => { setMemorizationOpen(false); setActiveScriptBreakdown(null); }}
           />
         )}
       </AnimatePresence>
 
       <AnimatePresence>
-        {sceneReaderOpen && breakdown && (
+        {sceneReaderOpen && (breakdown || activeScriptBreakdown) && (
           <SceneReader
-            memorization={breakdown.memorization}
-            characterName={breakdown.character_name}
+            memorization={(activeScriptBreakdown || breakdown).memorization}
+            characterName={(activeScriptBreakdown || breakdown).character_name}
             ttsAvailable={ttsAvailable}
-            onClose={() => setSceneReaderOpen(false)}
+            onClose={() => { setSceneReaderOpen(false); setActiveScriptBreakdown(null); }}
           />
         )}
       </AnimatePresence>

@@ -34,6 +34,7 @@ import {
   Printer,
   TrendingUp,
   EyeOff,
+  Sparkles,
 } from "lucide-react";
 
 const container = {
@@ -61,6 +62,7 @@ function highlightKeywords(text, keywords = []) {
 export default function BreakdownView({
   breakdown,
   onRegenerate,
+  onReanalyzeDeep,
   onExportPdf,
   onNewAnalysis,
   onOpenMemorization,
@@ -68,6 +70,7 @@ export default function BreakdownView({
   onShare,
   ttsAvailable,
   isShareView = false,
+  hideHeader = false,
 }) {
   const [takesTab, setTakesTab] = useState("grounded");
 
@@ -93,7 +96,7 @@ export default function BreakdownView({
   return (
     <div
       data-testid="breakdown-view"
-      className="min-h-screen bg-[#09090b] pb-16"
+      className={hideHeader ? "pb-16" : "min-h-screen bg-[#09090b] pb-16"}
     >
       {/* Debug/Fallback Banner */}
       {isFallback && (
@@ -111,6 +114,7 @@ export default function BreakdownView({
         </div>
       )}
       {/* Header */}
+      {!hideHeader && (
       <header className="sticky top-0 z-40 bg-[#09090b]/90 backdrop-blur-md border-b border-zinc-900">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
@@ -235,6 +239,43 @@ export default function BreakdownView({
           )}
         </div>
       </header>
+      )}
+
+      {/* Re-analyze in Deep CTA — only for Quick breakdowns */}
+      {!isShareView && !isDeep && onReanalyzeDeep && (
+        <motion.div
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+          className="max-w-5xl mx-auto px-4 sm:px-6 pt-5"
+        >
+          <button
+            data-testid="reanalyze-deep-button"
+            onClick={onReanalyzeDeep}
+            className="w-full group relative overflow-hidden rounded-lg border border-amber-500/20 bg-gradient-to-r from-zinc-900 via-zinc-900 to-zinc-900 hover:border-amber-500/40 transition-all duration-300 px-5 py-3.5 text-left"
+          >
+            <div className="absolute inset-0 bg-gradient-to-r from-amber-500/5 via-amber-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+            <div className="relative flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3 min-w-0">
+                <div className="shrink-0 w-8 h-8 rounded-full bg-amber-500/10 flex items-center justify-center">
+                  <Sparkles className="w-4 h-4 text-amber-500" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-zinc-200 group-hover:text-white transition-colors">
+                    Go Deeper
+                  </p>
+                  <p className="text-xs text-zinc-500 truncate">
+                    Re-analyze with tactical arc, layered subtext & physical life
+                  </p>
+                </div>
+              </div>
+              <Badge className="bg-amber-500/10 text-amber-500 border-amber-500/20 text-[10px] shrink-0 group-hover:bg-amber-500/20 transition-colors">
+                DEEP
+              </Badge>
+            </div>
+          </button>
+        </motion.div>
+      )}
 
       {/* Content */}
       <motion.div
