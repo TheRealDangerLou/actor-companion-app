@@ -14,6 +14,9 @@ import {
   Sparkles,
   Layers,
   Zap,
+  AlertTriangle,
+  RotateCcw,
+  Loader2,
 } from "lucide-react";
 import BreakdownView from "@/components/BreakdownView";
 
@@ -21,6 +24,7 @@ export default function ScriptOverview({
   scriptData,
   ttsAvailable,
   onNewAnalysis,
+  onRetryScene,
   onOpenMemorization,
   onOpenSceneReader,
   onExportPdf,
@@ -31,12 +35,14 @@ export default function ScriptOverview({
   onSelectBreakdown,
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
+  const [retrying, setRetrying] = useState(false);
 
   if (!scriptData || !scriptData.breakdowns?.length) return null;
 
   const { breakdowns, character_name, mode, prepMode, costSummary } = scriptData;
   const activeBreakdown = breakdowns[activeIndex];
   const isDeep = mode === "deep";
+  const isFailed = (b) => b?.id?.toString().startsWith("failed-");
 
   // Adaptive tool visibility based on prep mode
   const showRunLines = prepMode !== "silent";
@@ -78,23 +84,31 @@ export default function ScriptOverview({
 
           {/* Scene tabs */}
           <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 no-scrollbar">
-            {breakdowns.map((b, i) => (
-              <button
-                key={b.id}
-                data-testid={`script-scene-tab-${i}`}
-                onClick={() => setActiveIndex(i)}
-                className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-                  i === activeIndex
-                    ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
-                    : "text-zinc-500 hover:text-zinc-300 border border-transparent hover:border-zinc-800"
-                }`}
-              >
-                <span className="font-mono mr-1">#{b.scene_number || i + 1}</span>
-                <span className="hidden sm:inline">
-                  {(b.scene_heading || b.character_name || `Scene ${i + 1}`).slice(0, 25)}
-                </span>
-              </button>
-            ))}
+            {breakdowns.map((b, i) => {
+              const failed = isFailed(b);
+              return (
+                <button
+                  key={b.id}
+                  data-testid={`script-scene-tab-${i}`}
+                  onClick={() => setActiveIndex(i)}
+                  className={`shrink-0 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                    failed
+                      ? i === activeIndex
+                        ? "bg-red-500/10 text-red-400 border border-red-500/30"
+                        : "text-red-500/50 hover:text-red-400 border border-transparent hover:border-red-500/20"
+                      : i === activeIndex
+                      ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                      : "text-zinc-500 hover:text-zinc-300 border border-transparent hover:border-zinc-800"
+                  }`}
+                >
+                  <span className="font-mono mr-1">#{b.scene_number || i + 1}</span>
+                  {failed && <AlertTriangle className="w-3 h-3 inline ml-0.5" />}
+                  <span className="hidden sm:inline">
+                    {failed ? "Failed" : (b.scene_heading || b.character_name || `Scene ${i + 1}`).slice(0, 25)}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           {/* Cost summary */}
@@ -155,7 +169,8 @@ export default function ScriptOverview({
         </div>
       )}
 
-      {/* Per-scene action bar */}
+      {/* Per-scene action bar — hidden for failed scenes */}
+      {!isFailed(activeBreakdown) && (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-1">
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1" data-testid="scene-action-bar">
           {/* Memorize — shown first for booked role */}
@@ -245,8 +260,9 @@ export default function ScriptOverview({
           )}
         </div>
       </div>
+      )}
 
-      {/* Active breakdown */}
+      {/* Active breakdown or failed scene retry card */}
       <AnimatePresence mode="wait">
         <motion.div
           key={activeBreakdown.id}
@@ -255,20 +271,87 @@ export default function ScriptOverview({
           exit={{ opacity: 0, x: -20 }}
           transition={{ duration: 0.25 }}
         >
-          <BreakdownView
-            breakdown={activeBreakdown}
-            onRegenerate={() => onRegenerate?.(activeBreakdown.id)}
-            onReanalyzeDeep={() => onReanalyzeDeep?.(activeBreakdown)}
-            onAdjusted={onAdjusted}
-            onExportPdf={() => onExportPdf?.(activeBreakdown.id)}
-            onNewAnalysis={onNewAnalysis}
-            onOpenMemorization={() => onOpenMemorization?.(activeBreakdown)}
-            onOpenSceneReader={() => onOpenSceneReader?.(activeBreakdown)}
-            onShare={() => onShare?.(activeBreakdown.id)}
-            ttsAvailable={ttsAvailable}
-            isShareView={false}
-            hideHeader={true}
-          />
+          {isFailed(activeBreakdown) ? (
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8" data-testid="failed-scene-card">
+              <div className="border border-red-500/20 bg-red-500/5 rounded-xl p-6 text-center space-y-4">
+                <AlertTriangle className="w-8 h-8 text-red-400 mx-auto" />
+                <div>
+                  <h3 className="text-base font-semibold text-zinc-200 mb-1">
+                    Scene #{activeBreakdown.scene_number} — Analysis Failed
+                  </h3>
+                  <p className="text-sm text-zinc-400 max-w-md mx-auto">
+                    {activeBreakdown.error_msg || "An unexpected error occurred during analysis."}
+                  </p>
+                </div>
+
+                {activeBreakdown.error_type && (
+                  <span className="inline-block px-2.5 py-1 rounded-full text-[11px] font-medium border border-red-500/20 text-red-400 bg-red-500/5">
+                    {activeBreakdown.error_type === "network_error" && "Network / Proxy Timeout"}
+                    {activeBreakdown.error_type === "service_unavailable" && "LLM Service Unavailable"}
+                    {activeBreakdown.error_type === "timeout" && "Analysis Timed Out"}
+                    {activeBreakdown.error_type === "budget_exceeded" && "Budget Exceeded"}
+                    {activeBreakdown.error_type === "rate_limited" && "Rate Limited"}
+                    {activeBreakdown.error_type === "backend_error" && "Backend Error"}
+                    {!["network_error", "service_unavailable", "timeout", "budget_exceeded", "rate_limited", "backend_error"].includes(activeBreakdown.error_type) && "Error"}
+                  </span>
+                )}
+
+                {onRetryScene && (
+                  <div>
+                    <Button
+                      data-testid="retry-scene-button"
+                      onClick={async () => {
+                        setRetrying(true);
+                        await onRetryScene(activeBreakdown);
+                        setRetrying(false);
+                      }}
+                      disabled={retrying}
+                      className="bg-amber-500 hover:bg-amber-600 text-black font-bold px-6 h-10 rounded-lg gap-2"
+                    >
+                      {retrying ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Retrying...
+                        </>
+                      ) : (
+                        <>
+                          <RotateCcw className="w-4 h-4" />
+                          Retry This Scene
+                        </>
+                      )}
+                    </Button>
+                  </div>
+                )}
+
+                {activeBreakdown.original_text && (
+                  <details className="text-left mt-4 cursor-pointer">
+                    <summary className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors">
+                      Show scene text ({activeBreakdown.original_text.length} chars)
+                    </summary>
+                    <pre className="mt-2 text-xs text-zinc-600 whitespace-pre-wrap max-h-40 overflow-y-auto bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
+                      {activeBreakdown.original_text.slice(0, 2000)}
+                      {activeBreakdown.original_text.length > 2000 && "\n..."}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            </div>
+          ) : (
+            <BreakdownView
+              breakdown={activeBreakdown}
+              onRegenerate={() => onRegenerate?.(activeBreakdown.id)}
+              onReanalyzeDeep={() => onReanalyzeDeep?.(activeBreakdown)}
+              onAdjusted={onAdjusted}
+              onExportPdf={() => onExportPdf?.(activeBreakdown.id)}
+              onNewAnalysis={onNewAnalysis}
+              onOpenMemorization={() => onOpenMemorization?.(activeBreakdown)}
+              onOpenSceneReader={() => onOpenSceneReader?.(activeBreakdown)}
+              onShare={() => onShare?.(activeBreakdown.id)}
+              ttsAvailable={ttsAvailable}
+              isShareView={false}
+              hideHeader={true}
+            />
+          )}
         </motion.div>
       </AnimatePresence>
 

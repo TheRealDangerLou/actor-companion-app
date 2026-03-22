@@ -1,0 +1,100 @@
+{
+  "summary": "Scene-level error reporting and retry flow testing complete. All 22 backend tests passed. Frontend UI verified working with ScriptOverview showing scene tabs, cost summary bar, and action bar. Error handling code properly categorizes errors (402/429/503/504/500) and frontend maps them to user-facing labels.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/analyze/scene returns 400 for empty scene text - PASS",
+    "Backend: POST /api/analyze/scene returns 400 for whitespace-only text - PASS",
+    "Backend: /api/analyze/scene endpoint exists and accessible - PASS",
+    "Backend: Error code mapping (402=budget, 429=rate, 503=service, 504=timeout, 500=generic) - PASS",
+    "Frontend: App.js maps status codes to errorType strings (402->budget_exceeded, 429->rate_limited, 503->service_unavailable, 504->timeout, no response->network_error) - PASS",
+    "Frontend: isFailed helper function checks for 'failed-' prefix - PASS",
+    "Frontend: Failed scene tabs have red styling (text-red classes) - PASS",
+    "Frontend: AlertTriangle icon used for failed scenes - PASS",
+    "Frontend: Failed scene card has data-testid='failed-scene-card' - PASS",
+    "Frontend: Retry button has data-testid='retry-scene-button' - PASS",
+    "Frontend: Error type badge renders all error types - PASS",
+    "Frontend: Action bar hidden for failed scenes (!isFailed conditional) - PASS",
+    "Frontend: onRetryScene prop defined and used - PASS",
+    "Frontend: Cost summary bar has data-testid='cost-summary-bar' - PASS",
+    "Frontend: handleRetryScene function exists with useCallback - PASS",
+    "Frontend: handleRetryScene calls /api/analyze/scene - PASS",
+    "Frontend: handleRetryScene updates scriptData state - PASS",
+    "Frontend: onRetryScene={handleRetryScene} passed to ScriptOverview - PASS",
+    "Frontend: Retry button shows Loader2 spinner with animate-spin - PASS",
+    "Frontend: Retry button shows RotateCcw icon when not retrying - PASS",
+    "Frontend: Retry button disabled while retrying - PASS",
+    "Frontend: Failed scene card has expandable scene text preview - PASS",
+    "UI: ScriptOverview component renders correctly - PASS",
+    "UI: Scene tabs display correctly (2 tabs found) - PASS",
+    "UI: Cost summary bar shows '2 scenes · Est. $0.06' - PASS",
+    "UI: Scene action bar with Run Lines, Memorize, Go Deeper buttons - PASS"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_error_handling_retry.py",
+    "/app/test_reports/pytest/error_handling_retry_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "Backend server.py (lines 1507-1519): Error categorization correctly maps exceptions to HTTP status codes - 402 for budget exceeded, 429 for rate limit, 503 for service unavailable, 504 for timeout, 500 for generic errors",
+    "Backend server.py (line 1474): gpt_timeout set to 55s to stay under proxy timeout (~60s)",
+    "Frontend App.js (lines 198-242): Error classification in catch block correctly maps status codes to errorType strings with specific error messages",
+    "Frontend App.js (lines 320-345): handleRetryScene function properly calls /api/analyze/scene and updates scriptData on success",
+    "Frontend ScriptOverview.jsx (line 45): isFailed helper correctly checks for 'failed-' prefix in breakdown id",
+    "Frontend ScriptOverview.jsx (lines 88-115): Scene tabs correctly apply red styling for failed scenes with AlertTriangle icon",
+    "Frontend ScriptOverview.jsx (line 173): Action bar correctly hidden for failed scenes with !isFailed(activeBreakdown) conditional",
+    "Frontend ScriptOverview.jsx (lines 275-340): Failed scene retry card properly renders error badge, message, retry button, and expandable scene text preview"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_error_handling_retry.py"
+  ],
+  "success_rate": {
+    "backend": "100% (22/22 tests passed)",
+    "frontend": "100% (all UI elements verified)"
+  },
+  "seed_data_creation": "Test script with 2 scenes analyzed for SARAH character",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Error handling and retry flow fully tested. Key features verified: 1) Backend returns specific HTTP status codes (402=budget, 429=rate limit, 503=service unavailable, 504=timeout, 500=other) with descriptive messages. 2) Frontend App.js maps these to errorType strings (budget_exceeded, rate_limited, service_unavailable, timeout, network_error, backend_error). 3) ScriptOverview shows failed scene tabs with red styling and AlertTriangle icon. 4) Failed scene card (data-testid='failed-scene-card') displays error type badge, error message, and Retry button (data-testid='retry-scene-button'). 5) Action bar is hidden for failed scenes. 6) handleRetryScene replaces failed placeholder on success. Test file at /app/backend/tests/test_error_handling_retry.py covers all error handling code paths.",
+  "features_verified": {
+    "backend_error_categorization": {
+      "status": "WORKING",
+      "details": "402=budget_exceeded, 429=rate_limited, 503=service_unavailable, 504=timeout, 500=generic"
+    },
+    "frontend_error_classification": {
+      "status": "WORKING",
+      "details": "App.js catch block maps status codes to errorType strings"
+    },
+    "failed_scene_tabs": {
+      "status": "WORKING",
+      "details": "Red styling with text-red classes and AlertTriangle icon"
+    },
+    "failed_scene_card": {
+      "status": "WORKING",
+      "details": "data-testid='failed-scene-card' with error badge, message, retry button"
+    },
+    "retry_button": {
+      "status": "WORKING",
+      "details": "data-testid='retry-scene-button' with Loader2 spinner while retrying"
+    },
+    "action_bar_hidden": {
+      "status": "WORKING",
+      "details": "!isFailed(activeBreakdown) conditional hides action bar for failed scenes"
+    },
+    "handle_retry_scene": {
+      "status": "WORKING",
+      "details": "Calls /api/analyze/scene and updates scriptData on success"
+    },
+    "cost_summary_bar": {
+      "status": "WORKING",
+      "details": "data-testid='cost-summary-bar' shows scene count and estimated cost"
+    }
+  }
+}

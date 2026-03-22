@@ -1471,7 +1471,7 @@ async def analyze_single_scene(request: SingleSceneRequest):
 
     logger.info(f"[COST] Scene #{request.scene_number} CACHE MISS — GPT call (est. ${estimate_cost(mode):.2f})")
     try:
-        gpt_timeout = 120 if mode == "deep" else 90
+        gpt_timeout = 55  # Stay under proxy timeout (~60s)
         result, raw = await asyncio.wait_for(
             analyze_with_gpt(text=analysis_text, mode=mode),
             timeout=gpt_timeout
@@ -1505,14 +1505,17 @@ async def analyze_single_scene(request: SingleSceneRequest):
 
     except asyncio.TimeoutError:
         logger.error(f"[analyze/scene] Scene #{request.scene_number} timed out")
-        raise HTTPException(status_code=504, detail=f"Analysis timed out for scene #{request.scene_number}. Try Quick mode.")
+        raise HTTPException(status_code=504, detail=f"Scene #{request.scene_number} timed out. Try Quick mode.")
     except Exception as e:
         err_str = str(e)
+        err_lower = err_str.lower()
         logger.error(f"[analyze/scene] Scene #{request.scene_number} failed: {err_str}")
-        if "budget" in err_str.lower() and "exceeded" in err_str.lower():
-            raise HTTPException(status_code=402, detail="LLM budget exceeded. Go to Profile > Universal Key > Add Balance to continue.")
-        if "rate" in err_str.lower() and "limit" in err_str.lower():
-            raise HTTPException(status_code=429, detail="Rate limit reached. Wait a moment and try again.")
+        if "budget" in err_lower and "exceeded" in err_lower:
+            raise HTTPException(status_code=402, detail="LLM budget exceeded. Go to Profile > Universal Key > Add Balance.")
+        if "rate" in err_lower and "limit" in err_lower:
+            raise HTTPException(status_code=429, detail="Rate limited. Wait a moment and retry.")
+        if any(kw in err_lower for kw in ["serviceunavailable", "connection refused", "upstream connect error", "connection reset", "service_unavailable"]):
+            raise HTTPException(status_code=503, detail="LLM service temporarily unavailable. Retry in a moment.")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {err_str[:200]}")
 
 

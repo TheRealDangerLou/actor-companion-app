@@ -197,20 +197,41 @@ function MainApp() {
           breakdowns.push(resp.data);
         } catch (sceneErr) {
           const status = sceneErr.response?.status;
-          const errMsg = sceneErr.response?.data?.detail || sceneErr.message;
-          console.error(`Scene ${scene.scene_number} failed (${status}):`, errMsg);
+          const detail = sceneErr.response?.data?.detail;
+
+          // Classify the error precisely
+          let errorType, errorMsg;
+          if (status === 402) {
+            errorType = "budget_exceeded";
+            errorMsg = detail || "Budget exceeded";
+          } else if (status === 429) {
+            errorType = "rate_limited";
+            errorMsg = detail || "Rate limited";
+          } else if (status === 503) {
+            errorType = "service_unavailable";
+            errorMsg = detail || "LLM service temporarily unavailable";
+          } else if (status === 504) {
+            errorType = "timeout";
+            errorMsg = detail || "Scene timed out";
+          } else if (!sceneErr.response) {
+            errorType = "network_error";
+            errorMsg = "Connection lost — the request exceeded proxy timeout. Retry individually.";
+          } else {
+            errorType = "backend_error";
+            errorMsg = detail || sceneErr.message || "Unknown error";
+          }
+          console.error(`Scene ${scene.scene_number} [${errorType}]:`, errorMsg);
 
           // Budget or rate limit — stop immediately, don't waste more calls
-          if (status === 402 || status === 429) {
-            toast.error(errMsg, { duration: 10000 });
-            // Still show any scenes that succeeded so far
+          if (errorType === "budget_exceeded" || errorType === "rate_limited") {
+            toast.error(errorMsg, { duration: 10000 });
             if (breakdowns.length > 0) {
               toast.info(`Showing ${breakdowns.length} scene${breakdowns.length > 1 ? 's' : ''} that completed.`);
             }
             break;
           }
 
-          // Other errors — add placeholder and continue
+          // Other errors — add placeholder with specific error info and continue
           breakdowns.push({
             id: `failed-${i}`,
             script_id,
@@ -218,14 +239,16 @@ function MainApp() {
             scene_heading: scene.heading,
             original_text: scene.text,
             mode,
-            scene_summary: `Analysis failed: ${errMsg}`,
+            error_type: errorType,
+            error_msg: errorMsg,
+            scene_summary: `Analysis failed: ${errorMsg}`,
             character_name: characterName,
             character_objective: "", stakes: "",
             beats: [], acting_takes: { grounded: "", bold: "", wildcard: "" },
             memorization: { chunked_lines: [], cue_recall: [] },
             self_tape_tips: { framing: "", eyeline: "", tone_energy: "" },
           });
-          toast.error(`Scene ${scene.scene_number} failed — skipping.`, { duration: 4000 });
+          toast.error(`Scene ${scene.scene_number}: ${errorMsg}`, { duration: 5000 });
         }
       }
 
@@ -285,6 +308,32 @@ function MainApp() {
     setShowPostActionAdjust(false);
   }, [view, scriptData]);
 
+  const handleRetryScene = useCallback(async (failedBreakdown) => {
+    const { script_id, scene_number, scene_heading, original_text, mode: sceneMode } = failedBreakdown;
+    const characterName = scriptData?.character_name;
+    toast.info(`Retrying scene ${scene_number}...`);
+    try {
+      const resp = await axios.post(`${API}/analyze/scene`, {
+        script_id,
+        scene_number,
+        scene_heading,
+        text: original_text,
+        character_name: characterName,
+        mode: sceneMode || scriptData?.mode || "quick",
+        prep_mode: scriptData?.prepMode,
+        project_type: scriptData?.projectType,
+      }, { timeout: 70000 });
+      setScriptData(prev => ({
+        ...prev,
+        breakdowns: prev.breakdowns.map(b => b.id === failedBreakdown.id ? resp.data : b),
+      }));
+      toast.success(`Scene ${scene_number} analyzed successfully.`);
+    } catch (err) {
+      const detail = err.response?.data?.detail || err.message;
+      toast.error(`Scene ${scene_number} retry failed: ${detail}`, { duration: 8000 });
+    }
+  }, [scriptData]);
+
   const handleCloseOverlay = useCallback((overlayType) => {
     if (overlayType === "memorization") setMemorizationOpen(false);
     if (overlayType === "sceneReader") setSceneReaderOpen(false);
@@ -335,6 +384,7 @@ function MainApp() {
               scriptData={scriptData}
               ttsAvailable={ttsAvailable}
               onNewAnalysis={handleNewAnalysis}
+              onRetryScene={handleRetryScene}
               onOpenMemorization={(b) => { setActiveScriptBreakdown(b); setMemorizationOpen(true); }}
               onOpenSceneReader={(b) => { setActiveScriptBreakdown(b); setSceneReaderOpen(true); }}
               onExportPdf={(id) => window.open(`${API}/export-pdf/${id}`, "_blank")}
