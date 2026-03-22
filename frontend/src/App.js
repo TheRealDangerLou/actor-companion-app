@@ -149,10 +149,12 @@ function MainApp() {
   const [sceneProgress, setSceneProgress] = useState(null); // {current, total, heading}
 
   const handleFullScriptAnalyze = useCallback(async (data) => {
-    // data = { scenes: [...], character_name, mode }
+    // data = { scenes: [...], character_name, mode, prepMode, projectType }
     const scenes = data.scenes;
     const mode = data.mode || "quick";
     const characterName = data.character_name;
+    const prepMode = data.prepMode || null;
+    const projectType = data.projectType || null;
 
     setLoading(true);
     setLoadingMode(mode);
@@ -185,6 +187,8 @@ function MainApp() {
             text: scene.text,
             character_name: characterName,
             mode,
+            prep_mode: prepMode,
+            project_type: projectType,
           }, { timeout: 180000 }); // 3min per scene max
           breakdowns.push(resp.data);
         } catch (sceneErr) {
@@ -209,7 +213,7 @@ function MainApp() {
         }
       }
 
-      const result = { script_id, character_name: characterName, mode, breakdowns };
+      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns };
       setScriptData(result);
       setView("script");
       const successCount = breakdowns.filter(b => !b.id?.startsWith("failed-")).length;

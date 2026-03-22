@@ -128,6 +128,8 @@ class SingleSceneRequest(BaseModel):
     text: str
     character_name: str
     mode: Optional[str] = "quick"
+    prep_mode: Optional[str] = None  # "audition" | "booked" | "silent" | "study"
+    project_type: Optional[str] = None  # "commercial" | "tvfilm" | "theatre" | "voiceover"
 
 class CreateScriptRequest(BaseModel):
     character_name: str
@@ -1246,7 +1248,14 @@ async def analyze_single_scene(request: SingleSceneRequest):
 
     character_name = request.character_name.strip()
     mode = request.mode or "quick"
-    analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {request.scene_heading}]\n\n{request.text}"
+    analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {request.scene_heading}]"
+    if request.prep_mode:
+        prep_labels = {"audition": "Audition prep", "booked": "Booked role / rehearsal", "silent": "Silent on-camera", "study": "General script study"}
+        analysis_text += f"\n[PREP CONTEXT: {prep_labels.get(request.prep_mode, request.prep_mode)}]"
+    if request.project_type:
+        type_labels = {"commercial": "Commercial", "tvfilm": "TV / Film", "theatre": "Theatre", "voiceover": "Voiceover"}
+        analysis_text += f"\n[PROJECT TYPE: {type_labels.get(request.project_type, request.project_type)}]"
+    analysis_text += f"\n\n{request.text}"
 
     logger.info(f"[analyze/scene] script={request.script_id}, scene #{request.scene_number}: {request.scene_heading}, mode={mode}")
 

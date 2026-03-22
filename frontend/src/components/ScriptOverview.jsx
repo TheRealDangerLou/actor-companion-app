@@ -7,12 +7,12 @@ import {
   ChevronLeft,
   ChevronRight,
   ScrollText,
-  Layers,
   Mic,
   BookOpen,
   Share2,
-  Download,
   Printer,
+  Sparkles,
+  Layers,
 } from "lucide-react";
 import BreakdownView from "@/components/BreakdownView";
 
@@ -32,9 +32,15 @@ export default function ScriptOverview({
 
   if (!scriptData || !scriptData.breakdowns?.length) return null;
 
-  const { breakdowns, character_name, mode } = scriptData;
+  const { breakdowns, character_name, mode, prepMode } = scriptData;
   const activeBreakdown = breakdowns[activeIndex];
   const isDeep = mode === "deep";
+
+  // Adaptive tool visibility based on prep mode
+  const showRunLines = prepMode !== "silent";
+  const showMemorize = prepMode !== "silent";
+  // Tool order: booked role leads with Memorize
+  const memorizeFirst = prepMode === "booked";
 
   return (
     <div data-testid="script-overview" className="min-h-screen bg-[#09090b]">
@@ -128,6 +134,97 @@ export default function ScriptOverview({
           </p>
         </div>
       )}
+
+      {/* Per-scene action bar */}
+      <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-1">
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1" data-testid="scene-action-bar">
+          {/* Memorize — shown first for booked role */}
+          {memorizeFirst && showMemorize && onOpenMemorization && activeBreakdown.memorization && (
+            <Button
+              data-testid="scene-action-memorize"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenMemorization?.(activeBreakdown)}
+              className="shrink-0 border-amber-500/20 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400 gap-1.5 text-xs h-8"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Memorize
+            </Button>
+          )}
+
+          {/* Run Lines */}
+          {showRunLines && ttsAvailable && onOpenSceneReader && activeBreakdown.memorization?.cue_recall?.length > 0 && (
+            <Button
+              data-testid="scene-action-run-lines"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenSceneReader?.(activeBreakdown)}
+              className="shrink-0 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 hover:text-emerald-300 gap-1.5 text-xs h-8"
+            >
+              <Mic className="w-3.5 h-3.5" />
+              Run Lines
+            </Button>
+          )}
+
+          {/* Memorize — shown second for non-booked modes */}
+          {!memorizeFirst && showMemorize && onOpenMemorization && activeBreakdown.memorization && (
+            <Button
+              data-testid="scene-action-memorize"
+              variant="outline"
+              size="sm"
+              onClick={() => onOpenMemorization?.(activeBreakdown)}
+              className="shrink-0 border-amber-500/20 text-amber-500 hover:bg-amber-500/10 hover:text-amber-400 gap-1.5 text-xs h-8"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              Memorize
+            </Button>
+          )}
+
+          {/* Go Deeper — only on Quick breakdowns */}
+          {activeBreakdown.mode === "quick" && onReanalyzeDeep && (
+            <Button
+              data-testid="scene-action-go-deeper"
+              variant="outline"
+              size="sm"
+              onClick={() => onReanalyzeDeep?.(activeBreakdown)}
+              className="shrink-0 border-amber-500/20 text-amber-500/70 hover:bg-amber-500/10 hover:text-amber-400 gap-1.5 text-xs h-8"
+            >
+              <Layers className="w-3.5 h-3.5" />
+              Go Deeper
+            </Button>
+          )}
+
+          <div className="flex-1" />
+
+          {/* Share */}
+          {onShare && (
+            <Button
+              data-testid="scene-action-share"
+              variant="ghost"
+              size="sm"
+              onClick={() => onShare?.(activeBreakdown.id)}
+              className="shrink-0 text-zinc-500 hover:text-zinc-300 gap-1.5 text-xs h-8"
+            >
+              <Share2 className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Share</span>
+            </Button>
+          )}
+
+          {/* Print/Export */}
+          {onExportPdf && (
+            <Button
+              data-testid="scene-action-export"
+              variant="ghost"
+              size="sm"
+              onClick={() => onExportPdf?.(activeBreakdown.id)}
+              className="shrink-0 text-zinc-500 hover:text-zinc-300 gap-1.5 text-xs h-8"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">PDF</span>
+            </Button>
+          )}
+        </div>
+      </div>
 
       {/* Active breakdown */}
       <AnimatePresence mode="wait">

@@ -1,0 +1,85 @@
+{
+  "summary": "Feature Testing Complete: Per-scene action bar, Prep Mode Selection, and Adaptive tool display. All 15 backend tests passed (100%). Frontend testing confirmed all new features working correctly.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/analyze/scene accepts prep_mode='audition'",
+    "Backend: POST /api/analyze/scene accepts prep_mode='booked'",
+    "Backend: POST /api/analyze/scene accepts prep_mode='silent'",
+    "Backend: POST /api/analyze/scene accepts prep_mode='study'",
+    "Backend: POST /api/analyze/scene works without prep_mode (backward compatible)",
+    "Backend: POST /api/analyze/scene accepts project_type='commercial'",
+    "Backend: POST /api/analyze/scene accepts project_type='tvfilm'",
+    "Backend: POST /api/analyze/scene accepts project_type='theatre'",
+    "Backend: POST /api/analyze/scene accepts project_type='voiceover'",
+    "Backend: POST /api/analyze/text (Quick mode) regression - works",
+    "Backend: POST /api/analyze/text (Deep mode) regression - works",
+    "Backend: POST /api/parse-scenes regression - works",
+    "Backend: POST /api/scripts/create regression - works",
+    "Backend: Full Script Quick mode E2E regression - works",
+    "Backend: Breakdown has memorization data for action bar",
+    "Frontend: Full Script Step 3 shows 'What's this for?' with 4 prep mode options",
+    "Frontend: Full Script Step 3 shows 'Project type' with 4 options",
+    "Frontend: Prep modes are toggleable (click to select, click again to deselect)",
+    "Frontend: ScriptOverview shows per-scene action bar with all buttons",
+    "Frontend: Action bar shows Run Lines, Memorize, Go Deeper, Share, PDF buttons",
+    "Frontend: Clicking Memorize opens Memorization Mode overlay",
+    "Frontend: Silent prep mode hides Run Lines and Memorize buttons",
+    "Frontend: Booked role prep mode shows Memorize BEFORE Run Lines",
+    "Frontend: Single scene 'Paste sides' flow still works (regression)"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_prep_mode_features.py",
+    "/app/test_reports/pytest/prep_mode_features_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "ScriptOverview.jsx lines 39-43: Adaptive tool visibility correctly implemented - showRunLines/showMemorize based on prepMode, memorizeFirst for booked role",
+    "ScriptOverview.jsx lines 138-227: Per-scene action bar correctly renders all buttons with proper data-testid attributes",
+    "UploadPage.jsx lines 639-666: 'What's this for?' prep mode selector with 4 options (audition, booked, silent, study) correctly implemented",
+    "UploadPage.jsx lines 669-691: Project type selector with 4 options (commercial, tvfilm, theatre, voiceover) correctly implemented",
+    "App.js lines 183-191: handleFullScriptAnalyze correctly passes prepMode and projectType to analyze/scene API calls",
+    "server.py lines 124-132: SingleSceneRequest model correctly includes optional prep_mode and project_type fields",
+    "server.py lines 1251-1258: analyze_single_scene correctly includes prep context in analysis_text"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_prep_mode_features.py"
+  ],
+  "success_rate": {
+    "backend": "100% (15/15 tests passed)",
+    "frontend": "100% (All features verified working)"
+  },
+  "seed_data_creation": "Test scripts created inline in test file for prep mode and project type testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All three new features fully tested and working: 1) Per-scene action bar in ScriptOverview with Run Lines, Memorize, Go Deeper, Share, PDF buttons (data-testid='scene-action-bar'), 2) Prep Mode Selection in Full Script Step 3 with 4 options (audition, booked, silent, study) and Project Type with 4 options (commercial, tvfilm, theatre, voiceover), 3) Adaptive tool display - Silent mode hides Run Lines/Memorize, Booked mode shows Memorize before Run Lines. Backend test file at /app/backend/tests/test_prep_mode_features.py covers all prep_mode and project_type combinations. Regression tests confirm single scene 'Paste sides' flow and Full Script Quick mode still work.",
+  "features_verified": {
+    "per_scene_action_bar": {
+      "status": "WORKING",
+      "buttons": ["Run Lines", "Memorize", "Go Deeper", "Share", "PDF"],
+      "test_ids": ["scene-action-run-lines", "scene-action-memorize", "scene-action-go-deeper", "scene-action-share", "scene-action-export"]
+    },
+    "prep_mode_selection": {
+      "status": "WORKING",
+      "options": ["audition", "booked", "silent", "study"],
+      "toggle_behavior": "Click to select, click again to deselect"
+    },
+    "project_type_selection": {
+      "status": "WORKING",
+      "options": ["commercial", "tvfilm", "theatre", "voiceover"]
+    },
+    "adaptive_tool_display": {
+      "status": "WORKING",
+      "silent_mode": "Hides Run Lines and Memorize buttons",
+      "booked_mode": "Shows Memorize before Run Lines",
+      "audition_mode": "Default order (Run Lines, Memorize)"
+    }
+  }
+}

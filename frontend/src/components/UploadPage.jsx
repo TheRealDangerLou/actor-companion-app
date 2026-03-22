@@ -70,6 +70,8 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   const [isParsing, setIsParsing] = useState(false);
   const [parsedScenes, setParsedScenes] = useState(null);
   const [selectedScenes, setSelectedScenes] = useState(new Set());
+  const [prepMode, setPrepMode] = useState(null); // "audition" | "booked" | "silent" | "study"
+  const [projectType, setProjectType] = useState(null); // "commercial" | "tvfilm" | "theatre" | "voiceover"
   const fullScriptFileRef = useRef(null);
 
   const handleFileChange = useCallback((e) => {
@@ -232,9 +234,11 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
         scenes: scenesToAnalyze,
         character_name: characterName.trim(),
         mode,
+        prepMode,
+        projectType,
       });
     }
-  }, [parsedScenes, selectedScenes, characterName, mode, onFullScriptAnalyze]);
+  }, [parsedScenes, selectedScenes, characterName, mode, prepMode, projectType, onFullScriptAnalyze]);
 
   const buildContextString = () => {
     const parts = [];
@@ -629,6 +633,63 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                         <p className="text-xs text-zinc-600 mt-1.5">
                           We'll find every scene this character appears in
                         </p>
+                      </div>
+
+                      {/* Prep Mode */}
+                      <div>
+                        <label className="text-sm text-zinc-400 mb-2 block font-medium">
+                          What's this for?
+                        </label>
+                        <div className="grid grid-cols-2 gap-2" data-testid="prep-mode-selector">
+                          {[
+                            { id: "audition", label: "Audition", desc: "Breakdown + takes + self-tape" },
+                            { id: "booked", label: "Booked role", desc: "Memorize + rehearse + run lines" },
+                            { id: "silent", label: "Silent / on-camera", desc: "Breakdown + performance notes" },
+                            { id: "study", label: "Script study", desc: "Full analysis, all tools" },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              data-testid={`prep-mode-${opt.id}`}
+                              onClick={() => setPrepMode(prev => prev === opt.id ? null : opt.id)}
+                              className={`text-left p-2.5 rounded-lg border transition-all ${
+                                prepMode === opt.id
+                                  ? "border-amber-500/40 bg-amber-500/5"
+                                  : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-700"
+                              }`}
+                            >
+                              <p className={`text-xs font-medium ${prepMode === opt.id ? "text-amber-500" : "text-zinc-300"}`}>
+                                {opt.label}
+                              </p>
+                              <p className="text-[10px] text-zinc-600 mt-0.5">{opt.desc}</p>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Project Type */}
+                      <div>
+                        <label className="text-xs text-zinc-500 mb-1.5 block">Project type</label>
+                        <div className="flex flex-wrap gap-1.5" data-testid="project-type-selector">
+                          {[
+                            { id: "commercial", label: "Commercial" },
+                            { id: "tvfilm", label: "TV / Film" },
+                            { id: "theatre", label: "Theatre" },
+                            { id: "voiceover", label: "Voiceover" },
+                          ].map(opt => (
+                            <button
+                              key={opt.id}
+                              data-testid={`project-type-${opt.id}`}
+                              onClick={() => setProjectType(prev => prev === opt.id ? null : opt.id)}
+                              className={`text-xs px-2.5 py-1 rounded-full border transition-all ${
+                                projectType === opt.id
+                                  ? "border-amber-500/40 bg-amber-500/10 text-amber-500"
+                                  : "border-zinc-800 bg-zinc-900/30 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400"
+                              }`}
+                            >
+                              {opt.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
 
                       {/* Mode toggle for full script */}
