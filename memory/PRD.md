@@ -28,6 +28,9 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Submission Guards**: isSubmitting state prevents duplicate button clicks
 - **Post-Run Cost Feedback**: Toast after batch shows "X scenes · Y from cache · Est. $Z"; single analysis shows "from cache — $0.00" when cached
 - **Cost Summary Bar**: Subtle stat line in ScriptOverview header showing scene count, cache hit %, and estimated cost
+- **Scene-Level Error Reporting**: Backend categorizes errors into 402 (budget), 429 (rate limit), 503 (service unavailable), 504 (timeout), 500 (other). Frontend maps each to a user-facing label instead of generic "Network Error"
+- **Failed Scene Retry**: Red-flagged tabs for failed scenes, retry card with specific error type badge + message + "Retry This Scene" button. Successful retry replaces the failed placeholder in-place
+- **GPT Timeout Reduced**: Lowered to 55s per scene to stay under proxy timeout (~60s), preventing "Network Error" from proxy drops
 
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
