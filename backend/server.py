@@ -494,6 +494,105 @@ async def debug_pipeline():
     return {"all_ok": all_ok, "stages": results}
 
 
+@api_router.post("/extract-text")
+async def extract_text_from_file(file: UploadFile = File(...)):
+    """Extract text from a PDF or image file without analyzing it. Used by Full Script mode."""
+    try:
+        contents = await file.read()
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
+
+    if len(contents) > 20 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File must be under 20MB.")
+    if len(contents) == 0:
+        raise HTTPException(status_code=400, detail="File is empty.")
+
+    file_type = detect_file_type(file.content_type, file.filename, contents)
+    logger.info(f"[extract-text] File: {file.filename}, type: {file_type}, size: {len(contents)/1024:.0f}KB")
+
+    extracted_text = ""
+
+    if file_type == "pdf":
+        try:
+            from PyPDF2 import PdfReader
+            pdf_reader = PdfReader(io.BytesIO(contents))
+            for page in pdf_reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    extracted_text += page_text + "\n"
+            extracted_text = extracted_text.strip()
+            logger.info(f"[extract-text] PDF text: {len(extracted_text)} chars, {len(pdf_reader.pages)} pages")
+        except Exception as e:
+            logger.error(f"[extract-text] PDF text extraction failed: {e}")
+
+        if len(extracted_text) < 30:
+            logger.info("[extract-text] PDF text too short, using Vision OCR")
+            try:
+                page_images = pdf_pages_to_images(contents, max_pages=10, dpi=200)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=f"Could not process PDF: {e}")
+
+            all_page_text = []
+            api_key = os.environ.get('EMERGENT_LLM_KEY')
+            if not api_key:
+                raise HTTPException(status_code=500, detail="LLM API key not configured")
+
+            for page_num, page_jpeg in enumerate(page_images):
+                b64 = base64.b64encode(page_jpeg).decode('utf-8')
+                try:
+                    ocr_chat = LlmChat(
+                        api_key=api_key,
+                        session_id=str(uuid.uuid4()),
+                        system_message="Extract ALL text from this image exactly as written. Preserve line breaks, character names, stage directions, and formatting. Return only the extracted text, nothing else."
+                    ).with_model("openai", "gpt-5.2")
+                    ocr_msg = UserMessage(
+                        text="Extract all text from this script page.",
+                        file_contents=[ImageContent(image_base64=b64)]
+                    )
+                    page_text = await asyncio.wait_for(ocr_chat.send_message(ocr_msg), timeout=60)
+                    all_page_text.append(page_text.strip())
+                    logger.info(f"[extract-text] Page {page_num+1} OCR: {len(page_text)} chars")
+                except Exception as e:
+                    logger.warning(f"[extract-text] Page {page_num+1} OCR failed: {e}")
+                    all_page_text.append(f"[Page {page_num+1}: OCR failed]")
+
+            extracted_text = "\n\n".join(all_page_text)
+
+    elif file_type == "image":
+        try:
+            img_bytes = prepare_image_for_vision(contents)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Image processing failed: {e}")
+
+        b64 = base64.b64encode(img_bytes).decode('utf-8')
+        api_key = os.environ.get('EMERGENT_LLM_KEY')
+        if not api_key:
+            raise HTTPException(status_code=500, detail="LLM API key not configured")
+
+        try:
+            ocr_chat = LlmChat(
+                api_key=api_key,
+                session_id=str(uuid.uuid4()),
+                system_message="Extract ALL text from this image exactly as written. Preserve line breaks, character names, stage directions, and formatting. Return only the extracted text, nothing else."
+            ).with_model("openai", "gpt-5.2")
+            ocr_msg = UserMessage(
+                text="Extract all text from this script page.",
+                file_contents=[ImageContent(image_base64=b64)]
+            )
+            extracted_text = await asyncio.wait_for(ocr_chat.send_message(ocr_msg), timeout=60)
+            extracted_text = extracted_text.strip()
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"OCR failed: {e}")
+    else:
+        raise HTTPException(status_code=400, detail="Unsupported file type. Upload a PDF or image.")
+
+    if len(extracted_text) < 10:
+        raise HTTPException(status_code=400, detail="Could not extract enough text from this file. Try a clearer scan or paste the text manually.")
+
+    logger.info(f"[extract-text] Complete: {len(extracted_text)} chars extracted")
+    return {"text": extracted_text, "chars": len(extracted_text)}
+
+
 @api_router.post("/analyze/text")
 async def analyze_text(request: AnalyzeTextRequest):
     stages = []  # track what happened at each stage
@@ -976,7 +1075,7 @@ async def parse_scenes(request: ParseScenesRequest):
         has_char = character_in_scene(scene_text, character_name)
 
         # Generate preview: first 2 lines of dialogue or text, max 150 chars
-        lines = [l.strip() for l in scene_text.split('\n') if l.strip()]
+        lines = [ln.strip() for ln in scene_text.split('\n') if ln.strip()]
         preview_lines = lines[1:4] if len(lines) > 1 else lines[:3]  # Skip heading
         preview = ' / '.join(preview_lines)[:150]
 

@@ -1,0 +1,63 @@
+{
+  "summary": "Comprehensive testing of Bug Fix: Full Script Mode file upload support (PDF/image) and Voice Selection for Scene Reader. All 9 backend tests passed (100%). All frontend Playwright tests passed - Full Script upload zone + textarea with 'OR PASTE' divider, clarification toggles in Paste sides flow, and Voice Selection with 10 curated voices in Scene Reader.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/extract-text with text-based PDF returns extracted text and character count",
+    "Backend: POST /api/extract-text with image file returns OCR'd text",
+    "Backend: POST /api/extract-text with empty file returns 400 error",
+    "Backend: POST /api/extract-text with unsupported file type returns 400 error",
+    "Backend: GET /api/tts/voices returns exactly 10 voices",
+    "Backend: GET /api/tts/voices - all voices have full metadata (voice_id, name, gender, accent, style)",
+    "Backend: GET /api/tts/voices includes expected names (Rachel, Adam, Sarah, Daniel, Charlie)",
+    "Backend: POST /api/analyze/text (Quick mode) regression test passed",
+    "Backend: POST /api/parse-scenes (Full Script paste-only) regression test passed",
+    "Frontend: Full Script Step 2 shows both 'Upload PDF or image' zone and paste textarea",
+    "Frontend: 'OR PASTE' divider visible between upload zone and textarea",
+    "Frontend: File input element exists for Full Script upload",
+    "Frontend: Continue button appears after pasting script in Full Script mode",
+    "Frontend: Character name input and Find My Scenes button work in Step 3",
+    "Frontend: Scene selection (Step 4) shows scenes with 'YOUR SCENE' tags",
+    "Frontend: Clarification toggles appear in Paste sides Step 3 after clicking 'Add context'",
+    "Frontend: Clarification toggles (cold_read, comedic, dramatic, self_tape) can be selected/deselected",
+    "Frontend: Multiple clarification toggles can be selected simultaneously",
+    "Frontend: Scene Reader opens with Voice Active badge when TTS available",
+    "Frontend: Voice picker toggle shows 'Rachel (default)' initially",
+    "Frontend: Voice picker list shows all 10 curated voices with metadata",
+    "Frontend: Voice selection works - can select different voice (e.g., Adam)",
+    "Regression: 'Upload sides' flow still works with upload zone and file input",
+    "Regression: Full Script paste-only flow still works"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_extract_text_and_voices.py",
+    "/app/test_reports/pytest/extract_text_voices_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py lines 497-593: /api/extract-text endpoint correctly handles PDFs (text extraction + Vision OCR fallback) and images (Vision OCR)",
+    "server.py lines 1211-1223: DEFAULT_VOICES array contains 10 curated voices with full metadata",
+    "server.py lines 1231-1235: /api/tts/voices returns voices array with available flag",
+    "UploadPage.jsx lines 117-162: handleFullScriptFile correctly extracts text from PDF/image via /api/extract-text",
+    "UploadPage.jsx lines 456-519: Full Script Step 2 UI shows upload zone + 'OR PASTE' divider + textarea",
+    "UploadPage.jsx lines 774-796: Clarification toggles (CLARIFICATION_OPTIONS) render correctly with toggle functionality",
+    "SceneReader.jsx lines 340-382: Voice picker UI with 10 voices, shows name/gender/accent/style metadata"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_extract_text_and_voices.py"
+  ],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (all file upload, clarification toggles, and voice selection features verified working)"
+  },
+  "seed_data_creation": "Created test PDF with fpdf2 using new API (pdf.cell with text=, new_x='LMARGIN', new_y='NEXT'). Created test image with PIL for OCR testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Bug fix for Full Script Mode file upload fully tested and working. Key test data: Test PDF created with fpdf2 new API, test image created with PIL. Backend test file at /app/backend/tests/test_extract_text_and_voices.py covers extract-text endpoint and TTS voices. Frontend flow: input-type-fullscript > fullscript-upload-zone (clickable) + fullscript-file-input (hidden) + fullscript-textarea > step-next-2-fullscript. Clarification toggles: toggle-context-button > clarification-{id} toggles. Voice picker: voice-picker-toggle > voice-picker-list > voice-option-{voice_id}."
+}

@@ -65,6 +65,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   // Full Script mode state
   const [fullScriptText, setFullScriptText] = useState("");
   const [fullScriptFile, setFullScriptFile] = useState(null);
+  const [isExtracting, setIsExtracting] = useState(false);
   const [characterName, setCharacterName] = useState("");
   const [isParsing, setIsParsing] = useState(false);
   const [parsedScenes, setParsedScenes] = useState(null);
@@ -113,30 +114,58 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   }, []);
 
   // --- Full Script Helpers ---
-  const handleFullScriptFile = useCallback((e) => {
+  const handleFullScriptFile = useCallback(async (e) => {
     const file = e?.target?.files?.[0];
     if (!file) return;
-    // Read text-based files directly
-    const name = file.name.toLowerCase();
-    if (name.endsWith('.txt') || name.endsWith('.pdf')) {
-      setFullScriptFile(file);
-    } else {
-      toast.error("For Full Script mode, upload a .txt or .pdf file.");
-    }
     e.target.value = "";
+
+    const name = file.name.toLowerCase();
+    const isText = name.endsWith('.txt');
+    const isPdf = name.endsWith('.pdf');
+    const isImage = ['.jpg', '.jpeg', '.png', '.heic', '.heif', '.webp'].some(ext => name.endsWith(ext));
+
+    if (!isText && !isPdf && !isImage) {
+      toast.error("Upload a PDF, image, or text file.");
+      return;
+    }
+
+    setFullScriptFile(file);
+
+    // .txt files: read directly
+    if (isText) {
+      const text = await file.text();
+      setFullScriptText(text);
+      toast.success(`Loaded ${file.name} — ${text.split('\\n').length} lines`);
+      return;
+    }
+
+    // PDF/image: extract text via backend
+    setIsExtracting(true);
+    toast.loading("Extracting text from file...", { id: "extract" });
+    try {
+      const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
+      const formData = new FormData();
+      formData.append("file", file);
+      const response = await axios.post(`${API}/extract-text`, formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: 120000,
+      });
+      const { text, chars } = response.data;
+      setFullScriptText(text);
+      toast.success(`Extracted ${chars.toLocaleString()} characters from ${file.name}`, { id: "extract" });
+    } catch (err) {
+      const msg = err.response?.data?.detail || err.message || "Extraction failed";
+      toast.error(msg, { id: "extract", duration: 6000 });
+      setFullScriptFile(null);
+    }
+    setIsExtracting(false);
   }, []);
 
   const handleParseScenes = useCallback(async () => {
     let textToparse = fullScriptText.trim();
 
-    // If a PDF file was uploaded, use the analyze/image endpoint to extract text first
-    if (fullScriptFile && !textToparse) {
-      toast.error("Please paste your script text for Full Script mode.");
-      return;
-    }
-
     if (textToparse.length < 50) {
-      toast.error("Please paste more of the script for scene detection.");
+      toast.error("Not enough text for scene detection. Paste more script or upload a file.");
       return;
     }
     if (!characterName.trim()) {
@@ -426,15 +455,67 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
 
                 {/* Full Script input */}
                 {inputType === "fullscript" && (
-                  <div>
+                  <div className="space-y-3">
+                    {/* File upload area */}
+                    <div
+                      data-testid="fullscript-upload-zone"
+                      onClick={() => !isExtracting && fullScriptFileRef.current?.click()}
+                      className={`w-full border-2 border-dashed rounded-lg flex items-center justify-center cursor-pointer transition-all ${
+                        isExtracting ? "border-amber-500/30 bg-amber-500/5 cursor-wait" :
+                        fullScriptFile ? "border-emerald-500/30 bg-emerald-500/5 p-3" : "border-zinc-800 bg-zinc-900/30 hover:border-zinc-700 p-5"
+                      }`}
+                    >
+                      {isExtracting ? (
+                        <div className="flex items-center gap-2 py-2">
+                          <Loader2 className="w-4 h-4 animate-spin text-amber-500" />
+                          <span className="text-sm text-amber-500">Extracting text from {fullScriptFile?.name}...</span>
+                        </div>
+                      ) : fullScriptFile && fullScriptText ? (
+                        <div className="flex items-center justify-between w-full gap-2">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="w-4 h-4 text-emerald-500 shrink-0" />
+                            <span className="text-sm text-emerald-400 truncate">{fullScriptFile.name}</span>
+                            <span className="text-xs text-zinc-500 shrink-0">{fullScriptText.split('\n').length} lines</span>
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setFullScriptFile(null); setFullScriptText(""); }}
+                            className="text-zinc-500 hover:text-white text-xs shrink-0"
+                            data-testid="fullscript-clear-file"
+                          >
+                            Clear
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-col items-center gap-1.5">
+                          <Upload className="w-6 h-6 text-amber-500/60" />
+                          <p className="text-sm text-zinc-400">Upload PDF or image</p>
+                          <p className="text-[10px] text-zinc-600">PDF, JPG, PNG, HEIC</p>
+                        </div>
+                      )}
+                      <input
+                        ref={fullScriptFileRef}
+                        type="file"
+                        accept=".pdf,.txt,.jpg,.jpeg,.png,.heic,.heif,.webp"
+                        onChange={handleFullScriptFile}
+                        className="hidden"
+                        data-testid="fullscript-file-input"
+                      />
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      <div className="h-px flex-1 bg-zinc-800" />
+                      <span className="text-[10px] text-zinc-600 uppercase tracking-wider">or paste</span>
+                      <div className="h-px flex-1 bg-zinc-800" />
+                    </div>
+
+                    {/* Textarea */}
                     <textarea
                       data-testid="fullscript-textarea"
                       value={fullScriptText}
                       onChange={(e) => setFullScriptText(e.target.value)}
-                      placeholder={"Paste the full script here...\n\nINT. KITCHEN - DAY\n\nSARAH sits at the table.\n\nJOHN\nWe need to talk.\n\n...\n\nEXT. PARKING LOT - NIGHT\n\nJOHN walks to his car..."}
-                      className="w-full h-56 md:h-64 bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 font-script text-base text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none resize-none transition-colors"
+                      placeholder={"Paste the full script here...\n\nINT. KITCHEN - DAY\n\nSARAH sits at the table.\n\nJOHN\nWe need to talk.\n\n..."}
+                      className="w-full h-44 md:h-52 bg-zinc-900/50 border border-zinc-800 rounded-lg p-4 font-script text-base text-zinc-200 placeholder:text-zinc-600 focus:border-amber-500/50 focus:ring-1 focus:ring-amber-500/30 focus:outline-none resize-none transition-colors"
                     />
-                    <p className="text-xs text-zinc-600 mt-1.5">Paste the full screenplay or script — we'll find your scenes</p>
                   </div>
                 )}
 
@@ -476,7 +557,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
 
                 {/* Next or Analyze */}
                 {inputType === "fullscript" ? (
-                  fullScriptText.trim().length >= 50 ? (
+                  fullScriptText.trim().length >= 50 && !isExtracting ? (
                     <Button
                       data-testid="step-next-2-fullscript"
                       onClick={() => goToStep(3)}
@@ -485,9 +566,9 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                       Continue
                       <ArrowRight className="w-4 h-4" />
                     </Button>
-                  ) : (
-                    <p className="text-xs text-zinc-600 text-center mt-5">Paste the full script to continue</p>
-                  )
+                  ) : !isExtracting ? (
+                    <p className="text-xs text-zinc-600 text-center mt-5">Upload a file or paste the script to continue</p>
+                  ) : null
                 ) : hasInput ? (
                   <Button
                     data-testid="step-next-2"
