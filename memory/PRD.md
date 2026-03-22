@@ -38,6 +38,11 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Component Key Fix**: MemorizationMode and SceneReader now use `key={id}` to force full remount when switching scenes — fixes stale lines/state past scene 1
 - **PrepMode Propagation**: prepMode flows from ScriptOverview → BreakdownView, enabling mode-aware rendering throughout
 
+### Genre-Aware Analysis (Feb 2026)
+- **Vertical / Soap project type**: New option for vertical short-form drama and soap-style series
+- **Episode Parser**: Scene splitter now recognizes `EPISODE X`, `EP X`, `EP. X`, `CHAPTER X`, and `#X` markers (Tier 3, after INT/EXT and SCENE/ACT)
+- **Genre Direction Injection**: When project_type is "vertical", GPT receives specific genre context: heightened acting, faster turns, stronger reversals, camera-conscious physicality, tight memorization chunks
+
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
 - Behavior + Effect per beat (replaces emotion labels)
