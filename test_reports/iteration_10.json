@@ -1,0 +1,60 @@
+{
+  "summary": "Comprehensive testing of Scene Reader 'Run Lines' feature bug fix. The critical bug where voice-responsive mode would hang after the first cue has been FIXED. All 7 backend tests passed. Frontend Playwright tests verified full playback cycle through 5 cues without getting stuck.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: GET /api/tts/status returns {available: true}",
+    "Backend: POST /api/tts/generate with valid text returns base64 audio data URI",
+    "Backend: POST /api/tts/generate with empty text returns 400 error",
+    "Backend: POST /api/tts/generate with whitespace-only text returns 400 error",
+    "Backend: POST /api/tts/generate with custom voice_id works",
+    "Backend: GET /api/tts/voices returns list of available voices",
+    "Backend: Breakdowns have memorization.cue_recall data for Scene Reader",
+    "Frontend: Scene Reader overlay opens from BreakdownView (data-testid='scene-reader-button')",
+    "Frontend: Scene Reader shows 5 cue elements (data-testid='scene-reader-cue-0' through 'scene-reader-cue-4')",
+    "Frontend: Voice Active badge displayed when TTS is available",
+    "Frontend: Run Lines button starts playback (data-testid='scene-reader-play')",
+    "Frontend: Stop button appears during playback and stops immediately (data-testid='scene-reader-stop')",
+    "Frontend: Skip button advances to next cue (data-testid='scene-reader-skip')",
+    "Frontend: Restart button resets to initial state (data-testid='scene-reader-restart')",
+    "Frontend: Close button closes overlay (data-testid='scene-reader-close')",
+    "Frontend: Progress indicator shows '1/5', '2/5', etc. as cues advance",
+    "Frontend: 'Listening...' text appears during cue playback (your line blurred)",
+    "Frontend: 'Your turn — perform it' text appears when actor should speak",
+    "Frontend: 'Speaking...' indicator shows during TTS generation",
+    "Frontend: Full playback completes all 5 cues in ~50 seconds",
+    "Frontend: 'Scene complete. Great work.' toast appears on completion",
+    "Frontend: 'Run Again' button appears after completion",
+    "Frontend: Audio errors handled gracefully - playback continues via timer fallback"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_scene_reader_tts.py",
+    "/app/test_reports/pytest/scene_reader_tts_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "SceneReader.jsx lines 136-185: The runLines() async loop correctly uses abortRef.current checks after each await to handle Stop/Skip gracefully",
+    "SceneReader.jsx lines 98-117: Audio playback has 30s safety timeout to prevent indefinite hangs",
+    "SceneReader.jsx lines 160-167: Graceful fallback - if audio fails/blocked, uses 2s timer to advance instead of hanging",
+    "SceneReader.jsx lines 140-149: iOS audio unlock pattern implemented correctly with silent audio play on first gesture"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_scene_reader_tts.py"
+  ],
+  "success_rate": {
+    "backend": "100% (7/7 tests passed)",
+    "frontend": "100% (all Scene Reader features verified working)"
+  },
+  "seed_data_creation": "Used existing breakdowns in database. First breakdown (Felix) has 5 cue/line pairs for Scene Reader testing.",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Scene Reader bug fix verified working. Key implementation details: 1) Single persistent audio element (audioRef) avoids iOS autoplay issues. 2) abortRef.current checked after every await in runLines() loop. 3) 30s safety timeout on audio playback. 4) Timer fallback (2s) if audio fails. 5) timeoutRef cleared on Stop/Skip to allow immediate advancement. Console shows '[SceneReader] Audio error: Event' in headless browser but playback continues via timer - this is expected graceful degradation. Test file at /app/backend/tests/test_scene_reader_tts.py covers TTS endpoint.",
+  "rca_of_the_issue": "ORIGINAL BUG: Scene Reader would hang after first cue because audio.play() promise never resolved in headless/blocked scenarios. FIX: Added 30s safety timeout on audio playback, timer fallback when audio fails, and proper abort checks after each async operation. The fix ensures the reader always advances even when TTS/audio fails."
+}
