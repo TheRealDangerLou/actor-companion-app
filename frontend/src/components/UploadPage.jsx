@@ -974,6 +974,9 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
         >
           Powered by AI. Built for actors who book.
         </motion.p>
+        <p className="text-center text-[10px] text-zinc-700/50 mt-1.5">
+          Co-produced by DangerLou Media
+        </p>
       </div>
     </div>
   );

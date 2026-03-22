@@ -627,6 +627,13 @@ export default function BreakdownView({
           </Card>
         </motion.div>
       </motion.div>
+
+      {/* Footer signature */}
+      {!hideHeader && (
+        <p className="text-center text-[10px] text-zinc-700/50 pb-4 pt-2">
+          Co-produced by DangerLou Media
+        </p>
+      )}
     </div>
   );
 }

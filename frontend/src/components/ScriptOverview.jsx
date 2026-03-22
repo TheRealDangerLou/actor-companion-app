@@ -153,6 +153,11 @@ export default function ScriptOverview({
           />
         </motion.div>
       </AnimatePresence>
+
+      {/* Footer signature */}
+      <p className="text-center text-[10px] text-zinc-700/50 pb-4 pt-2">
+        Co-produced by DangerLou Media
+      </p>
     </div>
   );
 }
