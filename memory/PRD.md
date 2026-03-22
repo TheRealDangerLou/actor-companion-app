@@ -32,6 +32,12 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Failed Scene Retry**: Red-flagged tabs for failed scenes, retry card with specific error type badge + message + "Retry This Scene" button. Successful retry replaces the failed placeholder in-place
 - **GPT Timeout Reduced**: Lowered to 55s per scene to stay under proxy timeout (~60s), preventing "Network Error" from proxy drops
 
+### Booked Role Workflow (Feb 2026)
+- **Lines First Landing**: When prepMode is "booked", ScriptOverview shows a prominent hero card with line count, instant "Memorize" and "Run Lines" buttons — lines-first, not analysis-first
+- **Self-Tape Tips Hidden**: Self-Tape Setup card hidden for booked role (not relevant for on-set work)
+- **Component Key Fix**: MemorizationMode and SceneReader now use `key={id}` to force full remount when switching scenes — fixes stale lines/state past scene 1
+- **PrepMode Propagation**: prepMode flows from ScriptOverview → BreakdownView, enabling mode-aware rendering throughout
+
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
 - Behavior + Effect per beat (replaces emotion labels)
