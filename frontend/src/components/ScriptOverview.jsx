@@ -169,6 +169,46 @@ export default function ScriptOverview({
         </div>
       )}
 
+      {/* Booked Role: Lines First hero card */}
+      {prepMode === "booked" && !isFailed(activeBreakdown) && activeBreakdown.memorization?.cue_recall?.length > 0 && (
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-4" data-testid="lines-first-card">
+          <div className="border border-amber-500/20 bg-amber-500/5 rounded-xl p-4 flex items-center gap-4">
+            <div className="shrink-0 w-10 h-10 rounded-full bg-amber-500/10 flex items-center justify-center">
+              <BookOpen className="w-5 h-5 text-amber-500" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-zinc-200">
+                {activeBreakdown.memorization.cue_recall.length} line{activeBreakdown.memorization.cue_recall.length !== 1 ? "s" : ""} in this scene
+              </p>
+              <p className="text-xs text-zinc-500 mt-0.5">Jump straight to your lines</p>
+            </div>
+            <div className="flex gap-2 shrink-0">
+              <Button
+                data-testid="lines-first-memorize"
+                size="sm"
+                onClick={() => onOpenMemorization?.(activeBreakdown)}
+                className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs h-8 gap-1.5"
+              >
+                <BookOpen className="w-3.5 h-3.5" />
+                Memorize
+              </Button>
+              {ttsAvailable && (
+                <Button
+                  data-testid="lines-first-run-lines"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => onOpenSceneReader?.(activeBreakdown)}
+                  className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 text-xs h-8 gap-1.5"
+                >
+                  <Mic className="w-3.5 h-3.5" />
+                  Run Lines
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Per-scene action bar — hidden for failed scenes */}
       {!isFailed(activeBreakdown) && (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-1">
@@ -339,6 +379,7 @@ export default function ScriptOverview({
           ) : (
             <BreakdownView
               breakdown={activeBreakdown}
+              prepMode={prepMode}
               onRegenerate={() => onRegenerate?.(activeBreakdown.id)}
               onReanalyzeDeep={() => onReanalyzeDeep?.(activeBreakdown)}
               onAdjusted={onAdjusted}

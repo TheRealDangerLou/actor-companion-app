@@ -73,6 +73,7 @@ export default function BreakdownView({
   ttsAvailable,
   isShareView = false,
   hideHeader = false,
+  prepMode,
 }) {
   const [takesTab, setTakesTab] = useState("grounded");
 
@@ -589,7 +590,8 @@ export default function BreakdownView({
           </Card>
         </motion.div>
 
-        {/* Self-Tape Tips - full width */}
+        {/* Self-Tape Tips — hidden for booked role (not relevant for on-set work) */}
+        {prepMode !== "booked" && (
         <motion.div variants={item} className="md:col-span-2">
           <Card
             data-testid="self-tape-tips-card"
@@ -637,6 +639,7 @@ export default function BreakdownView({
             </CardContent>
           </Card>
         </motion.div>
+        )}
       </motion.div>
 
       {/* Footer signature */}

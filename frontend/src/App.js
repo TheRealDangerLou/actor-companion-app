@@ -416,6 +416,7 @@ function MainApp() {
       <AnimatePresence>
         {memorizationOpen && (breakdown || activeScriptBreakdown) && (
           <MemorizationMode
+            key={`memo-${(activeScriptBreakdown || breakdown)?.id}`}
             memorization={(activeScriptBreakdown || breakdown).memorization}
             characterName={(activeScriptBreakdown || breakdown).character_name}
             onClose={() => handleCloseOverlay("memorization")}
@@ -426,6 +427,7 @@ function MainApp() {
       <AnimatePresence>
         {sceneReaderOpen && (breakdown || activeScriptBreakdown) && (
           <SceneReader
+            key={`reader-${(activeScriptBreakdown || breakdown)?.id}`}
             memorization={(activeScriptBreakdown || breakdown).memorization}
             characterName={(activeScriptBreakdown || breakdown).character_name}
             ttsAvailable={ttsAvailable}

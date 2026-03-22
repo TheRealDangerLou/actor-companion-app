@@ -1,0 +1,71 @@
+{
+  "summary": "Frontend-only testing for 3 critical booked-role workflow bug fixes. All fixes verified working: 1) key props on MemorizationMode/SceneReader force component remount when switching scenes, 2) prepMode prop flows correctly to BreakdownView which conditionally hides Self-Tape Tips for booked role, 3) Lines First hero card appears correctly for booked role with Memorize and Run Lines buttons.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Code Review: MemorizationMode has key={`memo-${id}`} prop in App.js line 419 - PASS",
+    "Code Review: SceneReader has key={`reader-${id}`} prop in App.js line 430 - PASS",
+    "Code Review: BreakdownView accepts prepMode prop in function signature (line 77) - PASS",
+    "Code Review: Self-Tape Tips conditional {prepMode !== 'booked' && ...} in BreakdownView.jsx line 594 - PASS",
+    "Code Review: Lines First card has data-testid='lines-first-card' in ScriptOverview.jsx - PASS",
+    "Code Review: Lines First Memorize button has data-testid='lines-first-memorize' - PASS",
+    "Code Review: Lines First Run Lines button has data-testid='lines-first-run-lines' - PASS",
+    "Code Review: prepMode={prepMode} passed to BreakdownView in ScriptOverview.jsx line 382 - PASS",
+    "UI Test: Full Script flow with Booked Role shows Lines First card - PASS",
+    "UI Test: Lines First card shows correct line count (3 lines in this scene) - PASS",
+    "UI Test: Lines First card Memorize button clickable and opens MemorizationMode - PASS",
+    "UI Test: Self-Tape Tips card HIDDEN for Booked Role prepMode - PASS",
+    "UI Test: Full Script flow with Audition mode shows Self-Tape Tips card - PASS",
+    "UI Test: Lines First card NOT shown for Audition mode (correct) - PASS",
+    "UI Test: MemorizationMode opens correctly with SARAH's lines - PASS",
+    "UI Test: MemorizationMode shows tabs (My Lines, Line Run, Reader, Cue & Recall) - PASS"
+  ],
+  "test_report_links": [],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "App.js lines 418-424: MemorizationMode correctly uses key={`memo-${id}`} to force remount when activeScriptBreakdown changes - this fixes the stale lines bug when switching scenes",
+    "App.js lines 428-437: SceneReader correctly uses key={`reader-${id}`} to force remount when switching scenes",
+    "BreakdownView.jsx line 77: prepMode prop correctly added to function signature",
+    "BreakdownView.jsx line 594: Self-Tape Tips card correctly wrapped in {prepMode !== 'booked' && ...} conditional",
+    "ScriptOverview.jsx lines 172-210: Lines First hero card correctly shows only when prepMode='booked' AND scene has cue_recall data AND scene is not failed",
+    "ScriptOverview.jsx line 382: prepMode correctly passed from ScriptOverview to BreakdownView"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "N/A (frontend-only testing)",
+    "frontend": "100% (16/16 tests passed)"
+  },
+  "seed_data_creation": "Test script with 2 scenes (INT. KITCHEN - DAY, INT. LIVING ROOM - NIGHT) for SARAH character",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "All 3 booked-role workflow bugs are fixed and verified: 1) key props on MemorizationMode/SceneReader ensure fresh component state when switching scenes, 2) prepMode prop flows from ScriptOverview to BreakdownView and conditionally hides Self-Tape Tips for booked role, 3) Lines First hero card (data-testid='lines-first-card') appears for booked role with Memorize and Run Lines buttons. The Lines First card shows line count from memorization.cue_recall.length and only appears when prepMode='booked', scene is not failed, and cue_recall data exists.",
+  "features_verified": {
+    "memorization_mode_key_prop": {
+      "status": "WORKING",
+      "details": "key={`memo-${id}`} forces component remount when switching scenes"
+    },
+    "scene_reader_key_prop": {
+      "status": "WORKING",
+      "details": "key={`reader-${id}`} forces component remount when switching scenes"
+    },
+    "prep_mode_prop_flow": {
+      "status": "WORKING",
+      "details": "prepMode flows from ScriptOverview to BreakdownView correctly"
+    },
+    "self_tape_tips_conditional": {
+      "status": "WORKING",
+      "details": "Self-Tape Tips hidden when prepMode='booked', shown for other modes"
+    },
+    "lines_first_card": {
+      "status": "WORKING",
+      "details": "Shows for booked role with Memorize and Run Lines buttons, displays correct line count"
+    }
+  }
+}
