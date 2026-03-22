@@ -8,9 +8,24 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Backend**: FastAPI + MongoDB
 - **AI**: GPT-5.2 via Emergent LLM Key (text analysis + image vision/OCR)
 - **TTS**: ElevenLabs (live with paid key)
-- **PDF Rendering**: pymupdf (scanned PDFs → per-page OCR)
+- **PDF Rendering**: pymupdf (scanned PDFs -> per-page OCR)
 
 ## What's Implemented
+
+### Cost Optimization System (P0 - Feb 2026)
+- **Caching Layer**: SHA256 hash of (text + mode + character_name + cache_version) -> MongoDB `breakdown_cache` collection
+  - 72-hour TTL with automatic expiration
+  - Cache versioning (bump `CACHE_VERSION` when prompts change)
+  - `from_cache: true` flag on cached responses
+  - Full cost logging: [COST] CACHE HIT/MISS on every request
+- **Check-Cache Endpoints**: `POST /api/check-cache` and `POST /api/check-cache/batch` for frontend pre-flight cost estimation
+- **Debug Pipeline**: `/api/debug/pipeline` no longer makes GPT calls — saves ~$0.03 per server restart
+- **Prompt Optimization**: REGENERATE_TAKES_PROMPT and ADJUST_TAKES_PROMPT reduced by ~60% token count
+- **Scene Text Hard Cap**: 8000 chars max before any processing (SCENE_TEXT_HARD_CAP)
+- **Text Truncation**: regenerate-takes now only sends first 3000 chars of scene text
+- **Frontend Cost Warnings**: Estimated cost display in Full Script step 4 ($0.03/quick, $0.08/deep per scene)
+- **Deep Mode Warning**: Alert when Deep mode selected for Full Script (recommends Quick)
+- **Submission Guards**: isSubmitting state prevents duplicate button clicks
 
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
@@ -19,12 +34,12 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 
 ### Full Script Mode
 - Upload/paste full screenplay (PDF, image, text)
-- Character name → finds all scenes containing that character
+- Character name -> finds all scenes containing that character
 - Scene detection: regex (INT./EXT.) + GPT fallback
 - Prep Mode: Audition / Booked / Silent / Study
 - Project Type: Commercial / TV-Film / Theatre / Voiceover
 - Per-scene analysis (avoids proxy timeouts)
-- **Budget-aware**: Detects 402 (budget) / 429 (rate limit), stops batch immediately, shows partial results
+- Budget-aware: Detects 402 (budget) / 429 (rate limit), stops batch immediately
 - Per-scene action bar with adaptive tools
 - ScriptOverview with scene tabs
 
@@ -32,8 +47,8 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - 5 adjustment options: Tighten pacing, Add depth, More natural, Raise stakes, Play the opposite
 - Adjustments stack (each builds on previous)
 - Only acting takes regenerated (fast ~10s)
-- **Inline panel**: below acting takes in BreakdownView
-- **Post-action card**: floating card after closing Scene Reader/Memorization
+- Inline panel below acting takes in BreakdownView
+- Post-action card: floating card after closing Scene Reader/Memorization
 - Adjustment history stored per breakdown
 
 ### Voice Selection for Scene Reader
@@ -51,14 +66,17 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 
 ## Key API Endpoints
 - `POST /api/extract-text` — Extract text from PDF/image
-- `POST /api/analyze/text` — Analyze text script
-- `POST /api/analyze/scene` — Analyze single scene (with prep_mode, project_type)
+- `POST /api/analyze/text` — Analyze text script (with caching)
+- `POST /api/analyze/scene` — Analyze single scene (with caching)
 - `POST /api/adjust-takes/{id}` — Adjust acting takes with stacking feedback
 - `POST /api/parse-scenes` — Parse full script into scenes
 - `POST /api/scripts/create` — Initialize script record
 - `GET /api/scripts/{id}` — Retrieve full script with breakdowns
 - `POST /api/tts/generate` — TTS audio (accepts voice_id)
 - `GET /api/tts/voices` — 10 curated voices
+- `POST /api/check-cache` — Check if a breakdown is cached (single)
+- `POST /api/check-cache/batch` — Check cache status for multiple scenes
+- `GET /api/debug/pipeline` — System health check (no GPT call)
 
 ## Prioritized Backlog
 ### P2
