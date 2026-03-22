@@ -26,6 +26,7 @@ export default function ScriptOverview({
   onShare,
   onRegenerate,
   onReanalyzeDeep,
+  onAdjusted,
   onSelectBreakdown,
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
@@ -239,6 +240,7 @@ export default function ScriptOverview({
             breakdown={activeBreakdown}
             onRegenerate={() => onRegenerate?.(activeBreakdown.id)}
             onReanalyzeDeep={() => onReanalyzeDeep?.(activeBreakdown)}
+            onAdjusted={onAdjusted}
             onExportPdf={() => onExportPdf?.(activeBreakdown.id)}
             onNewAnalysis={onNewAnalysis}
             onOpenMemorization={() => onOpenMemorization?.(activeBreakdown)}

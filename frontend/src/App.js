@@ -11,22 +11,24 @@ import MemorizationMode from "@/components/MemorizationMode";
 import SceneReader from "@/components/SceneReader";
 import ScriptOverview from "@/components/ScriptOverview";
 import LoadingScreen from "@/components/LoadingScreen";
+import AdjustmentPanel from "@/components/AdjustmentPanel";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function MainApp() {
   const [view, setView] = useState("upload"); // "upload" | "breakdown" | "script"
   const [breakdown, setBreakdown] = useState(null);
-  const [scriptData, setScriptData] = useState(null); // {script_id, character_name, mode, breakdowns}
+  const [scriptData, setScriptData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [loadingMode, setLoadingMode] = useState("quick");
   const [memorizationOpen, setMemorizationOpen] = useState(false);
   const [sceneReaderOpen, setSceneReaderOpen] = useState(false);
   const [ttsAvailable, setTtsAvailable] = useState(false);
   const [recentBreakdowns, setRecentBreakdowns] = useState([]);
-  // Track active breakdown for memorization/scene reader in script mode
   const [activeScriptBreakdown, setActiveScriptBreakdown] = useState(null);
   const [voices, setVoices] = useState([]);
+  const [showPostActionAdjust, setShowPostActionAdjust] = useState(false);
+  const [postActionBreakdownId, setPostActionBreakdownId] = useState(null);
 
   useEffect(() => {
     axios.get(`${API}/tts/status`).then(r => setTtsAvailable(r.data.available)).catch(() => {});
@@ -192,9 +194,21 @@ function MainApp() {
           }, { timeout: 180000 }); // 3min per scene max
           breakdowns.push(resp.data);
         } catch (sceneErr) {
+          const status = sceneErr.response?.status;
           const errMsg = sceneErr.response?.data?.detail || sceneErr.message;
-          console.error(`Scene ${scene.scene_number} failed:`, errMsg);
-          // Add placeholder for failed scene
+          console.error(`Scene ${scene.scene_number} failed (${status}):`, errMsg);
+
+          // Budget or rate limit — stop immediately, don't waste more calls
+          if (status === 402 || status === 429) {
+            toast.error(errMsg, { duration: 10000 });
+            // Still show any scenes that succeeded so far
+            if (breakdowns.length > 0) {
+              toast.info(`Showing ${breakdowns.length} scene${breakdowns.length > 1 ? 's' : ''} that completed.`);
+            }
+            break;
+          }
+
+          // Other errors — add placeholder and continue
           breakdowns.push({
             id: `failed-${i}`,
             script_id,
@@ -214,10 +228,16 @@ function MainApp() {
       }
 
       const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns };
-      setScriptData(result);
-      setView("script");
-      const successCount = breakdowns.filter(b => !b.id?.startsWith("failed-")).length;
-      toast.success(`${successCount} scene${successCount !== 1 ? 's' : ''} analyzed. Time to prep.`);
+      if (breakdowns.length > 0) {
+        setScriptData(result);
+        setView("script");
+        const successCount = breakdowns.filter(b => !b.id?.startsWith("failed-")).length;
+        if (successCount > 0) {
+          toast.success(`${successCount} scene${successCount !== 1 ? 's' : ''} analyzed. Time to prep.`);
+        }
+      } else {
+        toast.error("No scenes could be analyzed. Check your LLM key balance.");
+      }
       axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
     } catch (error) {
       const msg = error.response?.data?.detail || error.message || "Failed to start analysis";
@@ -239,6 +259,36 @@ function MainApp() {
     setLoading(false);
   }, []);
 
+  const handleAdjusted = useCallback((updatedBreakdown) => {
+    // Update single breakdown view
+    if (view === "breakdown") {
+      setBreakdown(updatedBreakdown);
+    }
+    // Update script data if in script mode
+    if (view === "script" && scriptData) {
+      setScriptData(prev => ({
+        ...prev,
+        breakdowns: prev.breakdowns.map(b => b.id === updatedBreakdown.id ? updatedBreakdown : b),
+      }));
+    }
+    setShowPostActionAdjust(false);
+  }, [view, scriptData]);
+
+  const handleCloseOverlay = useCallback((overlayType) => {
+    if (overlayType === "memorization") setMemorizationOpen(false);
+    if (overlayType === "sceneReader") setSceneReaderOpen(false);
+
+    // Show post-action adjustment card
+    const activeB = activeScriptBreakdown || breakdown;
+    if (activeB?.id) {
+      setPostActionBreakdownId(activeB.id);
+      setShowPostActionAdjust(true);
+      // Auto-dismiss after 10s
+      setTimeout(() => setShowPostActionAdjust(false), 10000);
+    }
+    setActiveScriptBreakdown(null);
+  }, [activeScriptBreakdown, breakdown]);
+
   return (
     <>
       <AnimatePresence mode="wait">
@@ -258,6 +308,7 @@ function MainApp() {
               breakdown={breakdown}
               onRegenerate={handleRegenerateTakes}
               onReanalyzeDeep={handleReanalyzeDeep}
+              onAdjusted={handleAdjusted}
               onExportPdf={handleExportPdf}
               onNewAnalysis={handleNewAnalysis}
               onOpenMemorization={() => setMemorizationOpen(true)}
@@ -295,6 +346,7 @@ function MainApp() {
                 if (!b?.original_text) return;
                 handleAnalyze({ type: "text", text: `[CHARACTER TO ANALYZE: ${scriptData.character_name}]\n[SCENE: ${b.scene_heading || ''}]\n\n${b.original_text}`, mode: "deep" });
               }}
+              onAdjusted={handleAdjusted}
             />
           </motion.div>
         )}
@@ -305,7 +357,7 @@ function MainApp() {
           <MemorizationMode
             memorization={(activeScriptBreakdown || breakdown).memorization}
             characterName={(activeScriptBreakdown || breakdown).character_name}
-            onClose={() => { setMemorizationOpen(false); setActiveScriptBreakdown(null); }}
+            onClose={() => handleCloseOverlay("memorization")}
           />
         )}
       </AnimatePresence>
@@ -317,8 +369,27 @@ function MainApp() {
             characterName={(activeScriptBreakdown || breakdown).character_name}
             ttsAvailable={ttsAvailable}
             voices={voices}
-            onClose={() => { setSceneReaderOpen(false); setActiveScriptBreakdown(null); }}
+            onClose={() => handleCloseOverlay("sceneReader")}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Post-action adjustment card */}
+      <AnimatePresence>
+        {showPostActionAdjust && postActionBreakdownId && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 20 }}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 w-[min(380px,90vw)]"
+          >
+            <AdjustmentPanel
+              breakdownId={postActionBreakdownId}
+              onAdjusted={handleAdjusted}
+              variant="post-action"
+              onDismiss={() => setShowPostActionAdjust(false)}
+            />
+          </motion.div>
         )}
       </AnimatePresence>
     </>

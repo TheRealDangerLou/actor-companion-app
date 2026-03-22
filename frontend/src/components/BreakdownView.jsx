@@ -36,6 +36,7 @@ import {
   EyeOff,
   Sparkles,
 } from "lucide-react";
+import AdjustmentPanel from "@/components/AdjustmentPanel";
 
 const container = {
   hidden: { opacity: 0 },
@@ -63,6 +64,7 @@ export default function BreakdownView({
   breakdown,
   onRegenerate,
   onReanalyzeDeep,
+  onAdjusted,
   onExportPdf,
   onNewAnalysis,
   onOpenMemorization,
@@ -574,6 +576,15 @@ export default function BreakdownView({
                   </TabsContent>
                 ))}
               </Tabs>
+
+              {/* Inline adjustment panel */}
+              {!isShareView && (
+                <AdjustmentPanel
+                  breakdownId={breakdown.id}
+                  onAdjusted={onAdjusted}
+                  variant="inline"
+                />
+              )}
             </CardContent>
           </Card>
         </motion.div>

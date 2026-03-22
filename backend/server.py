@@ -136,6 +136,9 @@ class CreateScriptRequest(BaseModel):
     mode: Optional[str] = "quick"
     scene_count: int
 
+class AdjustTakesRequest(BaseModel):
+    adjustments: List[str]  # stacking list: ["tighten_pacing", "raise_stakes"]
+
 
 # --- Scene Parsing ---
 def parse_scenes_regex(text: str) -> Optional[List[dict]]:
@@ -421,6 +424,11 @@ async def analyze_with_gpt(text=None, image_base64=None, context=None, mode="qui
     try:
         response = await chat.send_message(user_msg)
     except Exception as e:
+        err_str = str(e).lower()
+        if "budget" in err_str and "exceeded" in err_str:
+            raise Exception("STAGE:gpt_call | LLM budget exceeded. Please add balance at Profile > Universal Key > Add Balance.")
+        if "rate" in err_str and "limit" in err_str:
+            raise Exception("STAGE:gpt_call | Rate limit reached. Please wait a moment and try again.")
         raise Exception(f"STAGE:gpt_call | GPT request failed: {e}")
 
     if not response or not response.strip():
@@ -1015,6 +1023,109 @@ async def regenerate_takes(breakdown_id: str):
     return updated
 
 
+ADJUSTMENT_LABELS = {
+    "tighten_pacing": "Tighten the pacing — make it faster, more urgent, cut the fat",
+    "emotional_depth": "Add emotional depth — find the deeper undercurrent, let the vulnerability surface through behavior",
+    "more_natural": "Make it more natural — less performed, more conversational, like they're not even acting",
+    "raise_stakes": "Raise the stakes — this moment matters more than the actor thinks. Make every word count like it could change everything",
+    "play_opposite": "Play the opposite — flip the obvious read. If the scene reads angry, play it calm. If sad, play it amused. Find the unexpected truth",
+}
+
+ADJUST_TAKES_PROMPT = """You are a top-tier acting coach refining an actor's performance.
+
+You already gave them these 3 takes for a scene:
+PREVIOUS TAKES:
+{previous_takes}
+
+Now the actor wants adjustments. Apply EACH adjustment below to ALL 3 takes, building on (not replacing) the previous direction. Each adjustment stacks — the final takes should reflect ALL adjustments combined.
+
+ADJUSTMENTS TO APPLY:
+{adjustments}
+
+RULES:
+1. Keep each take's core identity (grounded stays grounded, bold stays bold, wildcard stays wildcard)
+2. Layer the adjustments ON TOP of the existing direction
+3. Every word must be immediately performable — specific physical choices, tempo, breath
+4. Don't explain the adjustment — just give the refined direction
+5. Keep it concise — a director whispering before the take, not a lecture
+
+Return ONLY valid JSON:
+{{
+  "acting_takes": {{
+    "grounded": "Refined naturalistic direction with all adjustments applied",
+    "bold": "Refined bold direction with all adjustments applied",
+    "wildcard": "Refined wildcard direction with all adjustments applied"
+  }}
+}}"""
+
+
+@api_router.post("/adjust-takes/{breakdown_id}")
+async def adjust_takes(breakdown_id: str, request: AdjustTakesRequest):
+    """Adjust acting takes based on stacking actor feedback."""
+    breakdown = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+    if not breakdown:
+        raise HTTPException(status_code=404, detail="Breakdown not found")
+
+    if not request.adjustments:
+        raise HTTPException(status_code=400, detail="No adjustments provided")
+
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        raise HTTPException(status_code=500, detail="LLM API key not configured")
+
+    # Build previous takes string
+    takes = breakdown.get("acting_takes", {})
+    prev_takes = f"Grounded: {takes.get('grounded', 'N/A')}\nBold: {takes.get('bold', 'N/A')}\nWildcard: {takes.get('wildcard', 'N/A')}"
+
+    # Build adjustment descriptions
+    adj_lines = []
+    for i, adj_id in enumerate(request.adjustments, 1):
+        label = ADJUSTMENT_LABELS.get(adj_id, adj_id)
+        adj_lines.append(f"{i}. {label}")
+    adjustments_text = "\n".join(adj_lines)
+
+    prompt = ADJUST_TAKES_PROMPT.format(
+        previous_takes=prev_takes,
+        adjustments=adjustments_text,
+    )
+
+    logger.info(f"[adjust-takes] Breakdown {breakdown_id}, adjustments: {request.adjustments}")
+
+    chat = LlmChat(
+        api_key=api_key,
+        session_id=str(uuid.uuid4()),
+        system_message=prompt
+    ).with_model("openai", "gpt-5.2")
+
+    user_msg = UserMessage(
+        text=f"Here's the scene:\n\n{breakdown['original_text'][:3000]}\n\nRefine the takes with the adjustments above."
+    )
+
+    try:
+        response = await asyncio.wait_for(chat.send_message(user_msg), timeout=60)
+        result = parse_json_response(response)
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="Adjustment timed out. Try again.")
+    except (ValueError, json.JSONDecodeError):
+        raise HTTPException(status_code=500, detail="Failed to parse adjusted takes")
+
+    new_takes = result.get("acting_takes", {})
+    # Store adjustment history
+    history = breakdown.get("adjustment_history", [])
+    history.append({
+        "adjustments": request.adjustments,
+        "previous_takes": takes,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+
+    await db.breakdowns.update_one(
+        {"id": breakdown_id},
+        {"$set": {"acting_takes": new_takes, "adjustment_history": history}}
+    )
+    updated = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+    return updated
+
+
 @api_router.get("/breakdowns/{breakdown_id}")
 async def get_breakdown(breakdown_id: str):
     breakdown = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
@@ -1293,8 +1404,13 @@ async def analyze_single_scene(request: SingleSceneRequest):
         logger.error(f"[analyze/scene] Scene #{request.scene_number} timed out")
         raise HTTPException(status_code=504, detail=f"Analysis timed out for scene #{request.scene_number}. Try Quick mode.")
     except Exception as e:
-        logger.error(f"[analyze/scene] Scene #{request.scene_number} failed: {e}")
-        raise HTTPException(status_code=500, detail=f"Analysis failed: {str(e)[:200]}")
+        err_str = str(e)
+        logger.error(f"[analyze/scene] Scene #{request.scene_number} failed: {err_str}")
+        if "budget" in err_str.lower() and "exceeded" in err_str.lower():
+            raise HTTPException(status_code=402, detail="LLM budget exceeded. Go to Profile > Universal Key > Add Balance to continue.")
+        if "rate" in err_str.lower() and "limit" in err_str.lower():
+            raise HTTPException(status_code=429, detail="Rate limit reached. Wait a moment and try again.")
+        raise HTTPException(status_code=500, detail=f"Analysis failed: {err_str[:200]}")
 
 
 # Curated default voices — available with any ElevenLabs API key

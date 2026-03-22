@@ -18,54 +18,47 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - Deep mode: Tactical Arc, what they hide, layered subtext, physical life
 
 ### Full Script Mode
-- Upload/paste a full screenplay or script (PDF, image, or text)
-- Enter character name → finds all scenes containing that character
-- Scene detection: regex-based (INT./EXT.) with GPT fallback
-- **Prep Mode Selection**: Audition / Booked role / Silent on-camera / Script study
-- **Project Type**: Commercial / TV-Film / Theatre / Voiceover
+- Upload/paste full screenplay (PDF, image, text)
+- Character name → finds all scenes containing that character
+- Scene detection: regex (INT./EXT.) + GPT fallback
+- Prep Mode: Audition / Booked / Silent / Study
+- Project Type: Commercial / TV-Film / Theatre / Voiceover
 - Per-scene analysis (avoids proxy timeouts)
-- Progress indicator: "Analyzing scene 2 of 5"
-- **Per-Scene Action Bar**: Run Lines, Memorize, Go Deeper, Share, Export PDF
-- **Adaptive Tool Display**: Silent hides line tools, Booked leads with Memorize
-- ScriptOverview with scene tabs + prev/next navigation
+- **Budget-aware**: Detects 402 (budget) / 429 (rate limit), stops batch immediately, shows partial results
+- Per-scene action bar with adaptive tools
+- ScriptOverview with scene tabs
 
-### "Go Deeper" (Re-analyze in Deep)
-- Quick breakdowns show "Go Deeper" CTA
-- Available per-scene in ScriptOverview action bar
+### Adjustment Loop (Performance Feedback)
+- 5 adjustment options: Tighten pacing, Add depth, More natural, Raise stakes, Play the opposite
+- Adjustments stack (each builds on previous)
+- Only acting takes regenerated (fast ~10s)
+- **Inline panel**: below acting takes in BreakdownView
+- **Post-action card**: floating card after closing Scene Reader/Memorization
+- Adjustment history stored per breakdown
 
 ### Voice Selection for Scene Reader
 - 10 curated ElevenLabs voices
-- Voice picker dropdown in Scene Reader controls
+- Voice picker dropdown in Scene Reader
 
-### Optional Clarification Toggles
+### Clarification Toggles
 - 8 quick-tap flags: Cold read, Comedic, Dramatic, Antagonist, Callback, Self-tape, Chemistry read, Under-5
 
 ### Scene Reader (AI Voice Partner)
-- Voice-responsive "Run Lines" with selected voice
-- iOS-safe audio, 30s timeout, graceful degradation
+- Voice-responsive "Run Lines", iOS-safe, graceful degradation
 
 ### Memorization Suite (4 modes)
 - My Lines, Line Run, Reader, Cue & Recall
 
-### File Upload Pipeline
-- Text PDFs, scanned PDFs (pymupdf + Vision OCR), images (HEIC support)
-- Standalone text extraction: POST /api/extract-text
-
 ## Key API Endpoints
 - `POST /api/extract-text` — Extract text from PDF/image
 - `POST /api/analyze/text` — Analyze text script
-- `POST /api/analyze/image` — Analyze uploaded image/PDF
+- `POST /api/analyze/scene` — Analyze single scene (with prep_mode, project_type)
+- `POST /api/adjust-takes/{id}` — Adjust acting takes with stacking feedback
 - `POST /api/parse-scenes` — Parse full script into scenes
 - `POST /api/scripts/create` — Initialize script record
-- `POST /api/analyze/scene` — Analyze single scene (with prep_mode, project_type)
-- `GET /api/scripts/{script_id}` — Retrieve full script with breakdowns
-- `GET /api/breakdowns` — List recent breakdowns
-- `POST /api/tts/generate` — Generate TTS audio (accepts voice_id)
-- `GET /api/tts/voices` — List 10 curated voices
-
-## DB Schema
-- **breakdowns**: `{id, original_text, mode, script_id?, scene_number?, scene_heading?, scene_summary, character_name, character_objective, stakes, beats[], acting_takes, memorization, self_tape_tips, created_at}`
-- **scripts**: `{id, character_name, mode, scene_count, breakdown_ids[], created_at}`
+- `GET /api/scripts/{id}` — Retrieve full script with breakdowns
+- `POST /api/tts/generate` — TTS audio (accepts voice_id)
+- `GET /api/tts/voices` — 10 curated voices
 
 ## Prioritized Backlog
 ### P2
