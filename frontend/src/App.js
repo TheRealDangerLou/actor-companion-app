@@ -173,18 +173,24 @@ function MainApp() {
       }, { timeout: 15000 });
       const { script_id } = createResp.data;
 
-      // Step 2: Analyze each scene individually (avoids proxy timeout)
-      const breakdowns = [];
-      for (let i = 0; i < scenes.length; i++) {
-        const scene = scenes[i];
+      // Step 2: Analyze scenes in parallel batches (3 at a time for speed)
+      const BATCH_SIZE = 3;
+      const breakdowns = new Array(scenes.length).fill(null);
+      let stopBatch = false;
+
+      for (let batchStart = 0; batchStart < scenes.length && !stopBatch; batchStart += BATCH_SIZE) {
+        const batchEnd = Math.min(batchStart + BATCH_SIZE, scenes.length);
+        const batch = scenes.slice(batchStart, batchEnd);
+
         setSceneProgress({
-          current: i + 1,
+          current: batchStart + 1,
           total: scenes.length,
-          heading: scene.heading || `Scene ${scene.scene_number}`,
+          heading: batch.map(s => s.heading || `Scene ${s.scene_number}`).join(", "),
         });
 
-        try {
-          const resp = await axios.post(`${API}/analyze/scene`, {
+        const batchPromises = batch.map((scene, batchIdx) => {
+          const globalIdx = batchStart + batchIdx;
+          return axios.post(`${API}/analyze/scene`, {
             script_id,
             scene_number: scene.scene_number,
             scene_heading: scene.heading || `Scene ${scene.scene_number}`,
@@ -193,74 +199,85 @@ function MainApp() {
             mode,
             prep_mode: prepMode,
             project_type: projectType,
-          }, { timeout: 180000 }); // 3min per scene max
-          breakdowns.push(resp.data);
-        } catch (sceneErr) {
-          const status = sceneErr.response?.status;
-          const detail = sceneErr.response?.data?.detail;
+          }, { timeout: 70000 }).then(resp => {
+            breakdowns[globalIdx] = resp.data;
+            // Update progress as each scene completes
+            const doneCount = breakdowns.filter(b => b !== null).length;
+            setSceneProgress(prev => ({ ...prev, current: doneCount }));
+          }).catch(sceneErr => {
+            const status = sceneErr.response?.status;
+            const detail = sceneErr.response?.data?.detail;
 
-          // Classify the error precisely
-          let errorType, errorMsg;
-          if (status === 402) {
-            errorType = "budget_exceeded";
-            errorMsg = detail || "Budget exceeded";
-          } else if (status === 429) {
-            errorType = "rate_limited";
-            errorMsg = detail || "Rate limited";
-          } else if (status === 503) {
-            errorType = "service_unavailable";
-            errorMsg = detail || "LLM service temporarily unavailable";
-          } else if (status === 504) {
-            errorType = "timeout";
-            errorMsg = detail || "Scene timed out";
-          } else if (!sceneErr.response) {
-            errorType = "network_error";
-            errorMsg = "Connection lost — the request exceeded proxy timeout. Retry individually.";
-          } else {
-            errorType = "backend_error";
-            errorMsg = detail || sceneErr.message || "Unknown error";
-          }
-          console.error(`Scene ${scene.scene_number} [${errorType}]:`, errorMsg);
-
-          // Budget or rate limit — stop immediately, don't waste more calls
-          if (errorType === "budget_exceeded" || errorType === "rate_limited") {
-            toast.error(errorMsg, { duration: 10000 });
-            if (breakdowns.length > 0) {
-              toast.info(`Showing ${breakdowns.length} scene${breakdowns.length > 1 ? 's' : ''} that completed.`);
+            let errorType, errorMsg;
+            if (status === 402) {
+              errorType = "budget_exceeded";
+              errorMsg = detail || "Budget exceeded";
+            } else if (status === 429) {
+              errorType = "rate_limited";
+              errorMsg = detail || "Rate limited";
+            } else if (status === 503) {
+              errorType = "service_unavailable";
+              errorMsg = detail || "LLM service temporarily unavailable";
+            } else if (status === 504) {
+              errorType = "timeout";
+              errorMsg = detail || "Scene timed out";
+            } else if (!sceneErr.response) {
+              errorType = "network_error";
+              errorMsg = "Connection lost — proxy timeout. Retry individually.";
+            } else {
+              errorType = "backend_error";
+              errorMsg = detail || sceneErr.message || "Unknown error";
             }
-            break;
-          }
+            console.error(`Scene ${scene.scene_number} [${errorType}]:`, errorMsg);
 
-          // Other errors — add placeholder with specific error info and continue
-          breakdowns.push({
-            id: `failed-${i}`,
-            script_id,
-            scene_number: scene.scene_number,
-            scene_heading: scene.heading,
-            original_text: scene.text,
-            mode,
-            error_type: errorType,
-            error_msg: errorMsg,
-            scene_summary: `Analysis failed: ${errorMsg}`,
-            character_name: characterName,
-            character_objective: "", stakes: "",
-            beats: [], acting_takes: { grounded: "", bold: "", wildcard: "" },
-            memorization: { chunked_lines: [], cue_recall: [] },
-            self_tape_tips: { framing: "", eyeline: "", tone_energy: "" },
+            if (errorType === "budget_exceeded" || errorType === "rate_limited") {
+              stopBatch = true;
+              toast.error(errorMsg, { duration: 10000 });
+            }
+
+            breakdowns[globalIdx] = {
+              id: `failed-${globalIdx}`,
+              script_id,
+              scene_number: scene.scene_number,
+              scene_heading: scene.heading,
+              original_text: scene.text,
+              mode,
+              error_type: errorType,
+              error_msg: errorMsg,
+              scene_summary: `Analysis failed: ${errorMsg}`,
+              character_name: characterName,
+              character_objective: "", stakes: "",
+              beats: [], acting_takes: { grounded: "", bold: "", wildcard: "" },
+              memorization: { chunked_lines: [], cue_recall: [] },
+              self_tape_tips: { framing: "", eyeline: "", tone_energy: "" },
+            };
+            toast.error(`Scene ${scene.scene_number}: ${errorMsg}`, { duration: 5000 });
           });
-          toast.error(`Scene ${scene.scene_number}: ${errorMsg}`, { duration: 5000 });
+        });
+
+        await Promise.all(batchPromises);
+
+        if (stopBatch) {
+          const completed = breakdowns.filter(b => b !== null && !b?.id?.toString().startsWith("failed-")).length;
+          if (completed > 0) {
+            toast.info(`Showing ${completed} scene${completed > 1 ? 's' : ''} that completed.`);
+          }
+          break;
         }
       }
 
-      const successBreakdowns = breakdowns.filter(b => !b.id?.startsWith("failed-"));
+      // Filter out null slots (shouldn't happen, but safety)
+      const finalBreakdowns = breakdowns.filter(b => b !== null);
+
+      const successBreakdowns = finalBreakdowns.filter(b => !b.id?.toString().startsWith("failed-"));
       const cachedCount = successBreakdowns.filter(b => b.from_cache).length;
       const freshCount = successBreakdowns.length - cachedCount;
       const COST_MAP = { quick: 0.03, deep: 0.08 };
       const estCost = freshCount * (COST_MAP[mode] || 0.03);
       const costSummary = { total: successBreakdowns.length, cached: cachedCount, fresh: freshCount, estimatedCost: estCost };
 
-      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns, costSummary };
-      if (breakdowns.length > 0) {
+      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns: finalBreakdowns, costSummary };
+      if (finalBreakdowns.length > 0) {
         setScriptData(result);
         setView("script");
         if (successBreakdowns.length > 0) {
