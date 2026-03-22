@@ -10,6 +10,7 @@ import json
 import io
 import re
 import uuid
+import hashlib
 import asyncio
 from pathlib import Path
 from pydantic import BaseModel, Field
@@ -51,6 +52,53 @@ try:
         logger.info("ElevenLabs API key not set - TTS disabled")
 except ImportError:
     logger.info("ElevenLabs SDK not installed - TTS disabled")
+
+# --- Caching & Cost Control ---
+CACHE_VERSION = "v1"  # Bump when prompts change to invalidate old cache
+CACHE_TTL_HOURS = 72  # 3 days
+SCENE_TEXT_HARD_CAP = 8000  # Max chars sent to GPT
+
+
+def compute_cache_key(text: str, mode: str, character_name: str = "") -> str:
+    """Deterministic cache key from normalized inputs."""
+    normalized = f"{text.strip()[:SCENE_TEXT_HARD_CAP]}|{mode}|{character_name.strip().lower()}|{CACHE_VERSION}"
+    return hashlib.sha256(normalized.encode()).hexdigest()
+
+
+async def get_cached_breakdown(cache_key: str):
+    """Return cached breakdown if exists and not expired."""
+    cached = await db.breakdown_cache.find_one({"cache_key": cache_key}, {"_id": 0})
+    if not cached:
+        logger.info(f"[COST] CACHE MISS: {cache_key[:16]}")
+        return None
+    created = datetime.fromisoformat(cached["cached_at"])
+    age_hours = (datetime.now(timezone.utc) - created).total_seconds() / 3600
+    if age_hours > CACHE_TTL_HOURS:
+        logger.info(f"[COST] CACHE EXPIRED ({age_hours:.1f}h): {cache_key[:16]}")
+        await db.breakdown_cache.delete_one({"cache_key": cache_key})
+        return None
+    logger.info(f"[COST] CACHE HIT ({age_hours:.1f}h old, saved 1 GPT call): {cache_key[:16]}")
+    return cached.get("result")
+
+
+async def store_cached_breakdown(cache_key: str, result: dict, mode: str, char_name: str = ""):
+    """Store breakdown in cache for future reuse."""
+    doc = {
+        "cache_key": cache_key,
+        "result": result,
+        "mode": mode,
+        "character_name": char_name.strip().lower(),
+        "cache_version": CACHE_VERSION,
+        "cached_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.breakdown_cache.replace_one({"cache_key": cache_key}, doc, upsert=True)
+    logger.info(f"[COST] CACHE STORED: {cache_key[:16]} (mode={mode})")
+
+
+def estimate_cost(mode: str) -> float:
+    """Rough per-scene cost estimate for a single GPT analysis call."""
+    return 0.08 if mode == "deep" else 0.03
+
 
 # --- Models ---
 class AnalyzeTextRequest(BaseModel):
@@ -138,6 +186,18 @@ class CreateScriptRequest(BaseModel):
 
 class AdjustTakesRequest(BaseModel):
     adjustments: List[str]  # stacking list: ["tighten_pacing", "raise_stakes"]
+
+
+class CheckCacheRequest(BaseModel):
+    text: str
+    mode: Optional[str] = "quick"
+    character_name: Optional[str] = ""
+
+
+class BatchCheckCacheRequest(BaseModel):
+    scenes: List[dict]
+    mode: Optional[str] = "quick"
+    character_name: Optional[str] = ""
 
 
 # --- Scene Parsing ---
@@ -341,18 +401,16 @@ You MUST respond with valid JSON only. No markdown.
 
 Return ONLY valid JSON."""
 
-REGENERATE_TAKES_PROMPT = """You are a top-tier acting coach. Generate 3 COMPLETELY NEW acting takes for this scene. These must be genuinely different from typical choices—specific, physical, immediately playable.
+REGENERATE_TAKES_PROMPT = """Acting coach. 3 NEW takes — specific, physical, immediately playable. No fluff.
 
 Return ONLY valid JSON:
 {
   "acting_takes": {
-    "grounded": "Specific naturalistic direction. Include physicality, tempo, breath work. Like a director whispering in their ear before a take.",
-    "bold": "A bold choice that pushes the scene. Not louder—DIFFERENT. Give specific emotional anchor and physical life.",
-    "wildcard": "An unexpected choice nobody else will make. Specific, committed, surprising. Could flip the whole scene."
+    "grounded": "Naturalistic: physicality, tempo, breath. Director's whisper.",
+    "bold": "Pushes the scene — not louder, DIFFERENT. Specific anchor + physical life.",
+    "wildcard": "Unexpected choice. Specific, committed, surprising."
   }
-}
-
-Every word must be immediately performable. No fluff."""
+}"""
 
 
 def parse_json_response(response_text):
@@ -457,23 +515,15 @@ async def debug_pipeline():
     api_key = os.environ.get('EMERGENT_LLM_KEY')
     results["llm_key"] = {"ok": bool(api_key), "value": f"{api_key[:8]}..." if api_key else "MISSING"}
 
-    # 2. Test GPT with a tiny fixed input
-    if api_key:
-        try:
-            chat = LlmChat(
-                api_key=api_key,
-                session_id="debug-test",
-                system_message="Respond with exactly: {\"test\": \"ok\"}"
-            ).with_model("openai", "gpt-5.2")
-            raw = await asyncio.wait_for(
-                chat.send_message(UserMessage(text="Say hello")),
-                timeout=30
-            )
-            results["gpt_call"] = {"ok": True, "response_length": len(raw), "first_100": raw[:100]}
-        except Exception as e:
-            results["gpt_call"] = {"ok": False, "error": str(e)}
-    else:
-        results["gpt_call"] = {"ok": False, "error": "No API key"}
+    # 2. LLM readiness (no GPT call — saves credits)
+    results["gpt_ready"] = {"ok": bool(api_key), "note": "Key present, no test call (cost savings)"}
+
+    # 2b. Cache stats
+    try:
+        cache_count = await db.breakdown_cache.count_documents({})
+        results["cache"] = {"ok": True, "cached_breakdowns": cache_count, "version": CACHE_VERSION, "ttl_hours": CACHE_TTL_HOURS}
+    except Exception as e:
+        results["cache"] = {"ok": False, "error": str(e)}
 
     # 3. Test MongoDB
     try:
@@ -626,24 +676,48 @@ async def analyze_text(request: AnalyzeTextRequest):
         raise HTTPException(status_code=400, detail="Please provide at least a few lines of dialogue")
 
     mode = request.mode or "quick"
-    stages.append({"stage": "input_received", "ok": True, "chars": len(request.text), "mode": mode})
-    logger.info(f"[analyze/text] Input: {len(request.text)} chars, mode={mode}")
+    input_text = request.text[:SCENE_TEXT_HARD_CAP] if len(request.text) > SCENE_TEXT_HARD_CAP else request.text
+    if len(request.text) > SCENE_TEXT_HARD_CAP:
+        logger.info(f"[COST] Text hard-capped: {len(request.text)} -> {SCENE_TEXT_HARD_CAP} chars")
+    stages.append({"stage": "input_received", "ok": True, "chars": len(input_text), "mode": mode})
+    logger.info(f"[analyze/text] Input: {len(input_text)} chars, mode={mode}")
+
+    # Check cache first
+    cache_key = compute_cache_key(input_text, mode)
+    cached_result = await get_cached_breakdown(cache_key)
+    if cached_result:
+        stages.append({"stage": "cache_hit", "ok": True})
+        breakdown_id = str(uuid.uuid4())
+        doc = {
+            "id": breakdown_id,
+            "original_text": input_text,
+            "mode": mode,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "from_cache": True,
+            **cached_result
+        }
+        await db.breakdowns.insert_one(doc)
+        stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+        stages.append({"stage": "db_save", "ok": True})
+        stored["_debug"] = {"stages": stages, "fallback": False, "cached": True}
+        logger.info("[COST] Served from cache — 0 GPT calls, $0.00")
+        return stored
 
     # GPT call with timeout (deep gets more time)
+    logger.info(f"[COST] Cache miss — GPT call (est. ${estimate_cost(mode):.2f})")
     gpt_timeout = 120 if mode == "deep" else 90
     try:
         result, raw = await asyncio.wait_for(
-            analyze_with_gpt(text=request.text, mode=mode),
+            analyze_with_gpt(text=input_text, mode=mode),
             timeout=gpt_timeout
         )
         stages.append({"stage": "gpt_analysis", "ok": True})
     except asyncio.TimeoutError:
         stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after 90s"})
         logger.error("[analyze/text] GPT timed out")
-        # Fallback: return the text with an error marker
         return {
             "id": str(uuid.uuid4()),
-            "original_text": request.text,
+            "original_text": input_text,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "scene_summary": "Analysis timed out — text captured below.",
             "character_name": "Unknown",
@@ -657,10 +731,9 @@ async def analyze_text(request: AnalyzeTextRequest):
         error_str = str(e)
         stages.append({"stage": "gpt_analysis", "ok": False, "error": error_str})
         logger.error(f"[analyze/text] GPT error: {error_str}")
-        # Fallback: return text + error detail
         return {
             "id": str(uuid.uuid4()),
-            "original_text": request.text,
+            "original_text": input_text,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "scene_summary": "Analysis failed — your text was saved. See error details.",
             "character_name": "Unknown",
@@ -671,11 +744,15 @@ async def analyze_text(request: AnalyzeTextRequest):
             "_debug": {"stages": stages, "fallback": True, "reason": error_str}
         }
 
+    # Cache result for future reuse
+    await store_cached_breakdown(cache_key, result, mode)
+    logger.info(f"[COST] GPT call complete — 1 call, est. ${estimate_cost(mode):.2f}")
+
     # Save to DB
     breakdown_id = str(uuid.uuid4())
     doc = {
         "id": breakdown_id,
-        "original_text": request.text,
+        "original_text": input_text,
         "mode": mode,
         "created_at": datetime.now(timezone.utc).isoformat(),
         **result
@@ -1004,8 +1081,9 @@ async def regenerate_takes(breakdown_id: str):
         system_message=REGENERATE_TAKES_PROMPT
     ).with_model("openai", "gpt-5.2")
 
+    scene_excerpt = breakdown['original_text'][:3000]
     user_msg = UserMessage(
-        text=f"Generate 3 new acting takes for:\n\n{breakdown['original_text']}"
+        text=f"Generate 3 new acting takes for:\n\n{scene_excerpt}"
     )
     response = await chat.send_message(user_msg)
 
@@ -1031,30 +1109,20 @@ ADJUSTMENT_LABELS = {
     "play_opposite": "Play the opposite — flip the obvious read. If the scene reads angry, play it calm. If sad, play it amused. Find the unexpected truth",
 }
 
-ADJUST_TAKES_PROMPT = """You are a top-tier acting coach refining an actor's performance.
+ADJUST_TAKES_PROMPT = """Refine these takes with the adjustments below. Stack all adjustments onto each take. Keep core identity (grounded/bold/wildcard). Be specific, physical, concise — director's whisper, not a lecture.
 
-You already gave them these 3 takes for a scene:
 PREVIOUS TAKES:
 {previous_takes}
 
-Now the actor wants adjustments. Apply EACH adjustment below to ALL 3 takes, building on (not replacing) the previous direction. Each adjustment stacks — the final takes should reflect ALL adjustments combined.
-
-ADJUSTMENTS TO APPLY:
+ADJUSTMENTS:
 {adjustments}
-
-RULES:
-1. Keep each take's core identity (grounded stays grounded, bold stays bold, wildcard stays wildcard)
-2. Layer the adjustments ON TOP of the existing direction
-3. Every word must be immediately performable — specific physical choices, tempo, breath
-4. Don't explain the adjustment — just give the refined direction
-5. Keep it concise — a director whispering before the take, not a lecture
 
 Return ONLY valid JSON:
 {{
   "acting_takes": {{
-    "grounded": "Refined naturalistic direction with all adjustments applied",
-    "bold": "Refined bold direction with all adjustments applied",
-    "wildcard": "Refined wildcard direction with all adjustments applied"
+    "grounded": "Refined direction with all adjustments",
+    "bold": "Refined direction with all adjustments",
+    "wildcard": "Refined direction with all adjustments"
   }}
 }}"""
 
@@ -1359,6 +1427,12 @@ async def analyze_single_scene(request: SingleSceneRequest):
 
     character_name = request.character_name.strip()
     mode = request.mode or "quick"
+
+    # Hard cap scene text
+    scene_text = request.text[:SCENE_TEXT_HARD_CAP] if len(request.text) > SCENE_TEXT_HARD_CAP else request.text
+    if len(request.text) > SCENE_TEXT_HARD_CAP:
+        logger.info(f"[COST] Scene #{request.scene_number} hard-capped: {len(request.text)} -> {SCENE_TEXT_HARD_CAP} chars")
+
     analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {request.scene_heading}]"
     if request.prep_mode:
         prep_labels = {"audition": "Audition prep", "booked": "Booked role / rehearsal", "silent": "Silent on-camera", "study": "General script study"}
@@ -1366,10 +1440,36 @@ async def analyze_single_scene(request: SingleSceneRequest):
     if request.project_type:
         type_labels = {"commercial": "Commercial", "tvfilm": "TV / Film", "theatre": "Theatre", "voiceover": "Voiceover"}
         analysis_text += f"\n[PROJECT TYPE: {type_labels.get(request.project_type, request.project_type)}]"
-    analysis_text += f"\n\n{request.text}"
+    analysis_text += f"\n\n{scene_text}"
 
     logger.info(f"[analyze/scene] script={request.script_id}, scene #{request.scene_number}: {request.scene_heading}, mode={mode}")
 
+    # Check cache (key includes character name for strict isolation)
+    cache_key = compute_cache_key(scene_text, mode, character_name)
+    cached_result = await get_cached_breakdown(cache_key)
+    if cached_result:
+        breakdown_id = str(uuid.uuid4())
+        doc = {
+            "id": breakdown_id,
+            "script_id": request.script_id,
+            "scene_number": request.scene_number,
+            "scene_heading": request.scene_heading,
+            "original_text": scene_text,
+            "mode": mode,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "from_cache": True,
+            **cached_result
+        }
+        await db.breakdowns.insert_one(doc)
+        stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
+        await db.scripts.update_one(
+            {"id": request.script_id},
+            {"$push": {"breakdown_ids": breakdown_id}}
+        )
+        logger.info(f"[COST] Scene #{request.scene_number} CACHE HIT — 0 GPT calls, $0.00")
+        return stored
+
+    logger.info(f"[COST] Scene #{request.scene_number} CACHE MISS — GPT call (est. ${estimate_cost(mode):.2f})")
     try:
         gpt_timeout = 120 if mode == "deep" else 90
         result, raw = await asyncio.wait_for(
@@ -1377,13 +1477,16 @@ async def analyze_single_scene(request: SingleSceneRequest):
             timeout=gpt_timeout
         )
 
+        # Cache for future reuse
+        await store_cached_breakdown(cache_key, result, mode, character_name)
+
         breakdown_id = str(uuid.uuid4())
         doc = {
             "id": breakdown_id,
             "script_id": request.script_id,
             "scene_number": request.scene_number,
             "scene_heading": request.scene_heading,
-            "original_text": request.text,
+            "original_text": scene_text,
             "mode": mode,
             "created_at": datetime.now(timezone.utc).isoformat(),
             **result
@@ -1397,7 +1500,7 @@ async def analyze_single_scene(request: SingleSceneRequest):
             {"$push": {"breakdown_ids": breakdown_id}}
         )
 
-        logger.info(f"[analyze/scene] Scene #{request.scene_number} complete: {breakdown_id}")
+        logger.info(f"[COST] Scene #{request.scene_number} done — 1 GPT call, est. ${estimate_cost(mode):.2f}")
         return stored
 
     except asyncio.TimeoutError:
@@ -1411,6 +1514,43 @@ async def analyze_single_scene(request: SingleSceneRequest):
         if "rate" in err_str.lower() and "limit" in err_str.lower():
             raise HTTPException(status_code=429, detail="Rate limit reached. Wait a moment and try again.")
         raise HTTPException(status_code=500, detail=f"Analysis failed: {err_str[:200]}")
+
+
+@api_router.post("/check-cache")
+async def check_cache(request: CheckCacheRequest):
+    """Check if a breakdown for this input is already cached."""
+    cache_key = compute_cache_key(request.text, request.mode or "quick", request.character_name or "")
+    cached = await get_cached_breakdown(cache_key)
+    return {
+        "cached": cached is not None,
+        "cache_key": cache_key[:16],
+        "estimated_cost": 0.0 if cached else estimate_cost(request.mode or "quick"),
+    }
+
+
+@api_router.post("/check-cache/batch")
+async def check_cache_batch(request: BatchCheckCacheRequest):
+    """Check cache status for multiple scenes before batch analysis."""
+    mode = request.mode or "quick"
+    char_name = request.character_name or ""
+    cached_count = 0
+    scene_results = []
+    for scene in request.scenes:
+        text = scene.get("text", "")
+        cache_key = compute_cache_key(text, mode, char_name)
+        cached = await get_cached_breakdown(cache_key)
+        is_cached = cached is not None
+        if is_cached:
+            cached_count += 1
+        scene_results.append({"scene_number": scene.get("scene_number", 0), "cached": is_cached})
+    uncached = len(request.scenes) - cached_count
+    return {
+        "total": len(request.scenes),
+        "cached": cached_count,
+        "uncached": uncached,
+        "estimated_cost": round(uncached * estimate_cost(mode), 2),
+        "scenes": scene_results,
+    }
 
 
 # Curated default voices — available with any ElevenLabs API key

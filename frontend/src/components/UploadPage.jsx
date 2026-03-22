@@ -6,6 +6,7 @@ import {
   Upload, FileText, Image, Sparkles, ArrowRight, ArrowLeft, Camera,
   ChevronDown, ChevronUp, Layers, Clock, Type, ImageIcon, CameraIcon,
   ScrollText, User, Search, Check, CheckSquare, Square, Loader2,
+  AlertTriangle,
 } from "lucide-react";
 import axios from "axios";
 
@@ -72,6 +73,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   const [selectedScenes, setSelectedScenes] = useState(new Set());
   const [prepMode, setPrepMode] = useState(null); // "audition" | "booked" | "silent" | "study"
   const [projectType, setProjectType] = useState(null); // "commercial" | "tvfilm" | "theatre" | "voiceover"
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const fullScriptFileRef = useRef(null);
 
   const handleFileChange = useCallback((e) => {
@@ -227,7 +229,8 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   }, [parsedScenes, selectedScenes]);
 
   const handleFullScriptSubmit = useCallback(() => {
-    if (!parsedScenes || selectedScenes.size === 0) return;
+    if (!parsedScenes || selectedScenes.size === 0 || isSubmitting) return;
+    setIsSubmitting(true);
     const scenesToAnalyze = parsedScenes.scenes.filter(s => selectedScenes.has(s.scene_number));
     if (onFullScriptAnalyze) {
       onFullScriptAnalyze({
@@ -238,7 +241,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
         projectType,
       });
     }
-  }, [parsedScenes, selectedScenes, characterName, mode, prepMode, projectType, onFullScriptAnalyze]);
+  }, [parsedScenes, selectedScenes, characterName, mode, prepMode, projectType, onFullScriptAnalyze, isSubmitting]);
 
   const buildContextString = () => {
     const parts = [];
@@ -256,6 +259,8 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   };
 
   const handleSubmit = () => {
+    if (isSubmitting) return;
+    setIsSubmitting(true);
     const contextStr = buildContextString();
     if (inputType === "text" && scriptText.trim().length >= 10) {
       const fullText = contextStr
@@ -725,6 +730,14 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                           <p className="text-[10px] mt-0.5 opacity-70">~30s per scene</p>
                         </button>
                       </div>
+                      {mode === "deep" && (
+                        <div className="flex items-start gap-2 px-1" data-testid="deep-mode-fullscript-warning">
+                          <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
+                          <p className="text-xs text-amber-500/80">
+                            Deep mode costs ~3x more per scene. For full scripts, Quick is recommended — you can always deep-dive individual scenes later.
+                          </p>
+                        </div>
+                      )}
 
                       <Button
                         data-testid="find-scenes-button"
@@ -860,12 +873,21 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                     <Button
                       data-testid="analyze-button"
                       onClick={handleSubmit}
-                      disabled={!canSubmit}
+                      disabled={!canSubmit || isSubmitting}
                       className="w-full mt-5 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
                     >
-                      <Sparkles className="w-4 h-4" />
-                      {mode === "deep" ? "Deep Analysis" : "Analyze My Sides"}
-                      <ArrowRight className="w-4 h-4" />
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Sparkles className="w-4 h-4" />
+                          {mode === "deep" ? "Deep Analysis" : "Analyze My Sides"}
+                          <ArrowRight className="w-4 h-4" />
+                        </>
+                      )}
                     </Button>
                   </div>
                 )}
@@ -964,20 +986,78 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                   })}
                 </div>
 
+                {/* Cost estimation & warnings */}
+                {selectedScenes.size > 0 && (() => {
+                  const COST_PER_SCENE = { quick: 0.03, deep: 0.08 };
+                  const estCost = selectedScenes.size * COST_PER_SCENE[mode];
+                  const isExpensive = estCost > 0.25;
+                  const isDeepBatch = mode === "deep" && selectedScenes.size > 2;
+
+                  return (
+                    <div
+                      data-testid="cost-estimation"
+                      className={`mt-4 rounded-lg border p-3 ${
+                        isDeepBatch
+                          ? "border-red-500/30 bg-red-500/5"
+                          : isExpensive
+                          ? "border-amber-500/30 bg-amber-500/5"
+                          : "border-zinc-800 bg-zinc-900/30"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-zinc-400">
+                          {selectedScenes.size} scene{selectedScenes.size > 1 ? "s" : ""} &times; {mode === "deep" ? "Deep" : "Quick"}
+                        </span>
+                        <span
+                          className={
+                            isDeepBatch ? "text-red-400 font-semibold" :
+                            isExpensive ? "text-amber-500 font-semibold" :
+                            "text-zinc-300"
+                          }
+                        >
+                          &asymp; ${estCost.toFixed(2)}
+                        </span>
+                      </div>
+                      {isDeepBatch && (
+                        <div className="flex items-start gap-2 mt-2">
+                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
+                          <p className="text-xs text-red-400">
+                            Deep mode on {selectedScenes.size} scenes is expensive. Quick mode gives great results at ~60% less cost.
+                          </p>
+                        </div>
+                      )}
+                      {!isDeepBatch && isExpensive && (
+                        <p className="text-xs text-amber-500/70 mt-1.5">
+                          Consider analyzing fewer scenes or using Quick mode to save credits.
+                        </p>
+                      )}
+                    </div>
+                  );
+                })()}
+
                 {/* Analyze selected */}
                 <Button
                   data-testid="analyze-batch-button"
                   onClick={handleFullScriptSubmit}
-                  disabled={selectedScenes.size === 0}
-                  className="w-full mt-5 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
+                  disabled={selectedScenes.size === 0 || isSubmitting}
+                  className="w-full mt-4 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
                 >
-                  <Sparkles className="w-4 h-4" />
-                  {selectedScenes.size === 0
-                    ? "Select scenes to analyze"
-                    : selectedScenes.size === 1
-                    ? `Analyze 1 Scene (${mode === 'deep' ? 'Deep' : 'Quick'})`
-                    : `Break Down ${selectedScenes.size} Scenes (${mode === 'deep' ? 'Deep' : 'Quick'})`}
-                  <ArrowRight className="w-4 h-4" />
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Starting analysis...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      {selectedScenes.size === 0
+                        ? "Select scenes to analyze"
+                        : selectedScenes.size === 1
+                        ? `Analyze 1 Scene (${mode === 'deep' ? 'Deep' : 'Quick'})`
+                        : `Break Down ${selectedScenes.size} Scenes (${mode === 'deep' ? 'Deep' : 'Quick'})`}
+                      <ArrowRight className="w-4 h-4" />
+                    </>
+                  )}
                 </Button>
               </motion.div>
             )}
