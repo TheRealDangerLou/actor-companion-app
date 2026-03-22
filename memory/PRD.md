@@ -26,6 +26,8 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Frontend Cost Warnings**: Estimated cost display in Full Script step 4 ($0.03/quick, $0.08/deep per scene)
 - **Deep Mode Warning**: Alert when Deep mode selected for Full Script (recommends Quick)
 - **Submission Guards**: isSubmitting state prevents duplicate button clicks
+- **Post-Run Cost Feedback**: Toast after batch shows "X scenes · Y from cache · Est. $Z"; single analysis shows "from cache — $0.00" when cached
+- **Cost Summary Bar**: Subtle stat line in ScriptOverview header showing scene count, cache hit %, and estimated cost
 
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
