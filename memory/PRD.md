@@ -24,6 +24,23 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - Deep mode: Tactical Arc (not Emotional Arc), layered subtext (surface → what it does → if this fails)
 - Acting takes: line-specific physical direction, bold = sharper not softer
 
+### Full Script Mode (NEW - March 22, 2026)
+- Upload/paste a full screenplay or script
+- Enter character name → app finds all scenes containing that character
+- Scene detection: regex-based (INT./EXT. headers) with GPT fallback for non-standard formats
+- Character detection: identifies ALL CAPS dialogue cues per scene
+- Scene list shows: heading, preview text, character badges, "YOUR SCENE" tags
+- Select individual scenes or "Select All" for batch analysis
+- One Quick/Deep mode choice applies to all selected scenes
+- ScriptOverview view: scene tabs, prev/next navigation, per-scene breakdowns
+- Each scene gets its own independent breakdown (memorization, takes, etc.)
+- Scenes linked by script_id in the database
+
+### "Go Deeper" (Re-analyze in Deep) - March 22, 2026
+- Quick breakdowns show a "Go Deeper" CTA banner
+- One-click re-analysis with Deep mode using the stored original_text
+- Button auto-hides after upgrading to Deep (or on Deep breakdowns)
+
 ### Multi-Page Scanned PDF Support
 - Up to 5 pages rendered via pymupdf at 200dpi
 - Each page OCR'd independently via GPT Vision
@@ -37,7 +54,8 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - Fallback mode + stage-by-stage debug tracking
 
 ### Guided Upload Flow
-- 3-step stepper: (1) Choose input → (2) Input + Quick/Deep → (3) Context + Analyze
+- 3-step stepper for sides: (1) Choose input → (2) Input + Quick/Deep → (3) Context + Analyze
+- 4-step stepper for full script: (1) Full Script → (2) Paste script → (3) Character name + Mode + Find Scenes → (4) Select scenes + Analyze
 
 ### Memorization Suite (4 modes)
 - **My Lines**: Speed drill — tap-to-advance, large text
@@ -45,14 +63,38 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Reader**: Chunked lines with teleprompter
 - **Cue & Recall**: All pairs with tap-to-reveal
 
+### Scene Reader (AI Voice Partner)
+- Voice-responsive "Run Lines" mode via ElevenLabs TTS
+- Single persistent audio element (iOS-safe)
+- 30s safety timeout prevents hanging
+- Graceful degradation to text+timer when voice fails
+- Adjustable pause duration, skip, restart controls
+
 ### Quick / Deep Analysis Modes
 - **Quick** (~15-25s): Fast tactic-based prep with behavior/effect per beat
 - **Deep** (~30-60s): Full scene study with tactical arc, what they hide, layered subtext, physical life
 
+## Key API Endpoints
+- `POST /api/analyze/text` — Analyze text script (mode: quick/deep)
+- `POST /api/analyze/image` — Analyze uploaded image/PDF
+- `POST /api/parse-scenes` — Parse full script into scenes, detect characters
+- `POST /api/analyze/batch` — Batch-analyze multiple scenes
+- `GET /api/scripts/{script_id}` — Retrieve full script analysis
+- `GET /api/breakdowns` — List recent breakdowns
+- `GET /api/breakdowns/{id}` — Get single breakdown
+- `POST /api/regenerate-takes/{id}` — Regenerate acting takes
+- `POST /api/tts/generate` — Generate TTS audio
+- `GET /api/tts/status` — Check TTS availability
+- `GET /api/export-pdf/{id}` — Download PDF export
+- `GET /api/debug/pipeline` — Health check all dependencies
+
+## DB Schema
+- **breakdowns**: `{id, original_text, mode, script_id?, scene_number?, scene_heading?, scene_summary, character_name, character_objective, stakes, beats[], acting_takes, memorization, self_tape_tips, created_at}`
+- **scripts**: `{id, character_name, mode, scene_count, breakdown_ids[], created_at}`
+
 ## Prioritized Backlog
 ### P1
-- [ ] "Re-analyze in Deep" button on Quick breakdowns
-- [ ] Voice selection for Scene Reader
+- [ ] Voice selection for Scene Reader (blocked by TTS voices endpoint returning 0)
 - [ ] Optional clarification toggles (never required)
 
 ### P2
@@ -61,3 +103,4 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - [ ] Audition Tracker
 - [ ] Casting Director POV
 - [ ] User accounts & auth
+- [ ] Memorization Timer
