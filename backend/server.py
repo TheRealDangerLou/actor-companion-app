@@ -177,7 +177,7 @@ class SingleSceneRequest(BaseModel):
     character_name: str
     mode: Optional[str] = "quick"
     prep_mode: Optional[str] = None  # "audition" | "booked" | "silent" | "study"
-    project_type: Optional[str] = None  # "commercial" | "tvfilm" | "theatre" | "voiceover"
+    project_type: Optional[str] = None  # "commercial" | "tvfilm" | "theatre" | "voiceover" | "vertical"
 
 class CreateScriptRequest(BaseModel):
     character_name: str
@@ -202,15 +202,20 @@ class BatchCheckCacheRequest(BaseModel):
 
 # --- Scene Parsing ---
 def parse_scenes_regex(text: str) -> Optional[List[dict]]:
-    """Split script text into scenes using standard screenplay markers (INT./EXT.)."""
-    # Match scene headers: INT., EXT., INT/EXT., I/E. or numbered scenes
+    """Split script text into scenes using standard screenplay markers, episode markers, or dividers."""
+    # 1. Standard scene headers: INT./EXT./INT\/EXT./I/E.
     pattern = r'(?:^|\n)\s*((?:INT\.|EXT\.|INT/EXT\.|I/E\.)[\s\S]*?)(?=\n)'
     headers = list(re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE))
 
     if len(headers) < 2:
-        # Try numbered scenes: "SCENE 1", "Scene 1:", "1." at line start
+        # 2. Numbered scenes: "SCENE 1", "ACT TWO"
         pattern2 = r'(?:^|\n)\s*((?:SCENE\s+\d+|ACT\s+\w+)[\s\S]*?)(?=\n)'
         headers = list(re.finditer(pattern2, text, re.IGNORECASE | re.MULTILINE))
+
+    if len(headers) < 2:
+        # 3. Episode / chapter markers: "EPISODE 1", "EP 1", "EP. 1", "CHAPTER 1", "#1"
+        pattern3 = r'(?:^|\n)\s*((?:EPISODE\s+\d+|EP\.?\s*\d+|CHAPTER\s+\d+|#\s*\d+)[\s\S]*?)(?=\n)'
+        headers = list(re.finditer(pattern3, text, re.IGNORECASE | re.MULTILINE))
 
     if len(headers) < 2:
         return None  # Need GPT fallback
@@ -1438,8 +1443,10 @@ async def analyze_single_scene(request: SingleSceneRequest):
         prep_labels = {"audition": "Audition prep", "booked": "Booked role / rehearsal", "silent": "Silent on-camera", "study": "General script study"}
         analysis_text += f"\n[PREP CONTEXT: {prep_labels.get(request.prep_mode, request.prep_mode)}]"
     if request.project_type:
-        type_labels = {"commercial": "Commercial", "tvfilm": "TV / Film", "theatre": "Theatre", "voiceover": "Voiceover"}
+        type_labels = {"commercial": "Commercial", "tvfilm": "TV / Film", "theatre": "Theatre", "voiceover": "Voiceover", "vertical": "Vertical drama / Soap-style series"}
         analysis_text += f"\n[PROJECT TYPE: {type_labels.get(request.project_type, request.project_type)}]"
+        if request.project_type == "vertical":
+            analysis_text += "\n[GENRE DIRECTION: This is a vertical short-form drama / soap. The acting style is HEIGHTENED — faster emotional turns, stronger reversals, clearer beat buttons (end-of-episode hooks). Performances should be decisive and dramatic, not subtle or understated. Physical choices should be bold and camera-conscious (tight framing, direct looks). Memorization chunks should be tight — this is fast-paced material with sharp exchanges.]"
     analysis_text += f"\n\n{scene_text}"
 
     logger.info(f"[analyze/scene] script={request.script_id}, scene #{request.scene_number}: {request.scene_heading}, mode={mode}")

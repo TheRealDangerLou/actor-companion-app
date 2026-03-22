@@ -1,0 +1,77 @@
+{
+  "summary": "Completed testing of 'Vertical / Soap' project type feature. All backend and frontend tests pass. Backend correctly parses EPISODE/EP/CHAPTER markers (Tier 3 regex) and accepts project_type='vertical' with genre direction injection. Frontend displays 5 project type options including 'Vertical / Soap' with proper amber styling on selection.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: POST /api/parse-scenes correctly splits text by EPISODE markers (EPISODE 1, EPISODE 2, EPISODE 3) - PASS",
+    "Backend: POST /api/parse-scenes correctly splits text by EP markers (EP 1, EP 2, EP 3) - PASS",
+    "Backend: POST /api/parse-scenes correctly splits text by EP. markers (EP. 1, EP. 2) - PASS",
+    "Backend: POST /api/parse-scenes correctly splits text by CHAPTER markers (CHAPTER 1, CHAPTER 2, CHAPTER 3) - PASS",
+    "Backend: INT./EXT. markers (Tier 1) correctly take priority over EPISODE markers (Tier 3) - PASS",
+    "Backend: POST /api/analyze/scene accepts project_type='vertical' - PASS",
+    "Backend: All 5 project types (commercial, tvfilm, theatre, voiceover, vertical) accepted by API - PASS",
+    "Backend: API root endpoint working - PASS",
+    "Backend: Debug pipeline endpoint working - PASS",
+    "Frontend: Project type selector (data-testid='project-type-selector') present with 5 options - PASS",
+    "Frontend: 'Vertical / Soap' button (data-testid='project-type-vertical') present - PASS",
+    "Frontend: 'Vertical / Soap' button text is 'Vertical / Soap' - PASS",
+    "Frontend: Clicking 'Vertical / Soap' applies amber styling (border-amber-500/40 bg-amber-500/10 text-amber-500) - PASS"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_vertical_project_type.py",
+    "/app/test_reports/pytest/vertical_project_type_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py lines 204-218: parse_scenes_regex correctly implements 3-tier regex: Tier 1 (INT./EXT.), Tier 2 (SCENE/ACT), Tier 3 (EPISODE/EP/CHAPTER). Tier 3 only activates when Tier 1 and 2 find <2 matches.",
+    "server.py line 180: SingleSceneRequest model correctly includes project_type with 'vertical' as valid option",
+    "server.py lines 1445-1449: type_labels dict includes 'vertical' -> 'Vertical drama / Soap-style series' and genre direction injection for vertical type",
+    "UploadPage.jsx lines 678-698: Project type array includes {id: 'vertical', label: 'Vertical / Soap'} with proper data-testid and amber styling on selection"
+  ],
+  "updated_files": [],
+  "success_rate": {
+    "backend": "100% (9/9 tests passed)",
+    "frontend": "100% (4/4 tests passed)"
+  },
+  "seed_data_creation": "Test scripts with EPISODE/EP/CHAPTER markers for scene parsing tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Vertical / Soap project type feature fully implemented and tested. Key implementation details: 1) parse_scenes_regex has 3 tiers - INT/EXT first, then SCENE/ACT, then EPISODE/EP/CHAPTER. Tier 3 only activates when scripts don't have standard screenplay markers. 2) When project_type='vertical', the analysis_text gets [GENRE DIRECTION: ...] block with soap-style acting instructions. 3) Frontend has 5 project type buttons with data-testid='project-type-{id}' pattern.",
+  "features_verified": {
+    "episode_marker_parsing": {
+      "status": "WORKING",
+      "details": "EPISODE 1, EPISODE 2, etc. correctly split into separate scenes when no INT/EXT markers present"
+    },
+    "ep_marker_parsing": {
+      "status": "WORKING",
+      "details": "EP 1, EP 2, EP. 1, EP. 2 correctly split into separate scenes"
+    },
+    "chapter_marker_parsing": {
+      "status": "WORKING",
+      "details": "CHAPTER 1, CHAPTER 2, etc. correctly split into separate scenes"
+    },
+    "vertical_project_type_api": {
+      "status": "WORKING",
+      "details": "project_type='vertical' accepted by /api/analyze/scene endpoint"
+    },
+    "genre_direction_injection": {
+      "status": "WORKING",
+      "details": "When project_type='vertical', analysis_text includes [GENRE DIRECTION: ...] block with heightened soap-style acting instructions"
+    },
+    "frontend_project_type_selector": {
+      "status": "WORKING",
+      "details": "5 project type options displayed including 'Vertical / Soap' with proper data-testid attributes"
+    },
+    "vertical_button_styling": {
+      "status": "WORKING",
+      "details": "Clicking 'Vertical / Soap' applies amber styling (border-amber-500/40 bg-amber-500/10 text-amber-500)"
+    }
+  }
+}

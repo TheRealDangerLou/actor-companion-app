@@ -680,6 +680,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                             { id: "tvfilm", label: "TV / Film" },
                             { id: "theatre", label: "Theatre" },
                             { id: "voiceover", label: "Voiceover" },
+                            { id: "vertical", label: "Vertical / Soap" },
                           ].map(opt => (
                             <button
                               key={opt.id}
