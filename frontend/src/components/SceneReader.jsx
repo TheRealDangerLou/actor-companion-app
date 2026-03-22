@@ -66,33 +66,65 @@ export default function SceneReader({
     }
   }, [currentCue]);
 
+  // Cleanup on unmount
   useEffect(() => {
     return () => {
       abortRef.current = true;
-      if (audioRef.current) audioRef.current.pause();
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.src = "";
+      }
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
 
   const playCueAudio = useCallback(async (text) => {
-    if (!ttsAvailable) return;
+    if (!ttsAvailable) return false;
     setIsGenerating(true);
     try {
-      const response = await axios.post(`${API}/tts/generate`, { text });
-      if (abortRef.current) return;
-      const audio = new Audio(response.data.audio_url);
-      audioRef.current = audio;
-      await new Promise((resolve, reject) => {
-        audio.onended = resolve;
-        audio.onerror = reject;
-        audio.play().catch(reject);
+      const response = await axios.post(`${API}/tts/generate`, { text }, { timeout: 30000 });
+      if (abortRef.current) { setIsGenerating(false); return false; }
+
+      const audioUrl = response.data.audio_url;
+      if (!audioUrl) { setIsGenerating(false); return false; }
+
+      // Use a single reusable audio element to avoid iOS autoplay issues
+      if (!audioRef.current) {
+        audioRef.current = new Audio();
+      }
+      const audio = audioRef.current;
+      audio.src = audioUrl;
+
+      const played = await new Promise((resolve) => {
+        // Timeout: if audio doesn't finish in 30s, move on
+        const safetyTimeout = setTimeout(() => {
+          console.warn("[SceneReader] Audio playback timed out");
+          resolve(true);
+        }, 30000);
+
+        audio.onended = () => { clearTimeout(safetyTimeout); resolve(true); };
+        audio.onerror = (e) => {
+          clearTimeout(safetyTimeout);
+          console.warn("[SceneReader] Audio error:", e);
+          resolve(false);
+        };
+
+        audio.play().catch((err) => {
+          clearTimeout(safetyTimeout);
+          console.warn("[SceneReader] Audio play blocked:", err.message);
+          resolve(false);
+        });
       });
+
+      setIsGenerating(false);
+      return played;
     } catch (err) {
       if (!abortRef.current) {
-        console.error("TTS error:", err);
+        console.warn("[SceneReader] TTS request failed:", err.message);
       }
+      setIsGenerating(false);
+      return false;
     }
-    setIsGenerating(false);
   }, [ttsAvailable]);
 
   const waitForPause = useCallback(() => {
@@ -105,6 +137,17 @@ export default function SceneReader({
     abortRef.current = false;
     setIsPlaying(true);
 
+    // Pre-initialize audio element on the first user gesture (iOS requirement)
+    if (!audioRef.current) {
+      audioRef.current = new Audio();
+    }
+    // Silent load to "unlock" audio on iOS
+    try {
+      audioRef.current.src = "data:audio/wav;base64,UklGRiQAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQAAAAA=";
+      await audioRef.current.play();
+      audioRef.current.pause();
+    } catch (e) { /* expected on some browsers */ }
+
     for (let i = 0; i < cues.length; i++) {
       if (abortRef.current) break;
 
@@ -113,7 +156,14 @@ export default function SceneReader({
 
       // Play the cue line (other character) via TTS
       if (ttsAvailable) {
-        await playCueAudio(cues[i].cue);
+        const audioPlayed = await playCueAudio(cues[i].cue);
+        // If audio failed/was blocked, give a short pause to read the text cue
+        if (!audioPlayed && !abortRef.current) {
+          await new Promise(r => { timeoutRef.current = setTimeout(r, 2000); });
+        }
+      } else {
+        // No TTS — show cue text for a moment
+        await new Promise(r => { timeoutRef.current = setTimeout(r, 2500); });
       }
 
       if (abortRef.current) break;
@@ -138,7 +188,10 @@ export default function SceneReader({
     abortRef.current = true;
     setIsPlaying(false);
     setIsGenerating(false);
-    if (audioRef.current) audioRef.current.pause();
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
   }, []);
 
@@ -147,6 +200,20 @@ export default function SceneReader({
     setCurrentCue(-1);
     setShowYourLine(false);
   }, [stopPlaying]);
+
+  const skipToNext = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.src = "";
+    }
+    // Force advance: if currently waiting for audio/pause, the cleared timeout
+    // will resolve the promise (via the abort check in runLines)
+    if (currentCue < cues.length - 1) {
+      setCurrentCue(prev => prev + 1);
+      setShowYourLine(false);
+    }
+  }, [currentCue, cues.length]);
 
   const playSingleCue = useCallback(async (index) => {
     if (!ttsAvailable) return;
@@ -195,7 +262,7 @@ export default function SceneReader({
 
       {/* Controls */}
       <div className="px-4 sm:px-6 py-4 border-b border-zinc-900/50">
-        <div className="max-w-2xl mx-auto flex items-center gap-4 flex-wrap">
+        <div className="max-w-2xl mx-auto flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             {!isPlaying ? (
               <Button
@@ -215,6 +282,18 @@ export default function SceneReader({
               >
                 <Pause className="w-4 h-4" />
                 Stop
+              </Button>
+            )}
+            {isPlaying && (
+              <Button
+                data-testid="scene-reader-skip"
+                variant="ghost"
+                size="icon"
+                onClick={skipToNext}
+                className="text-zinc-400 hover:text-white"
+                title="Skip to next"
+              >
+                <SkipForward className="w-4 h-4" />
               </Button>
             )}
             <Button
@@ -251,6 +330,21 @@ export default function SceneReader({
           )}
         </div>
       </div>
+
+      {/* Progress indicator */}
+      {isPlaying && cues.length > 0 && (
+        <div className="px-4 sm:px-6 py-2 border-b border-zinc-900/30">
+          <div className="max-w-2xl mx-auto flex items-center gap-2">
+            <span className="text-xs text-zinc-600 tabular-nums">{Math.min(currentCue + 1, cues.length)}/{cues.length}</span>
+            <div className="flex-1 h-0.5 bg-zinc-900 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-emerald-500 rounded-full transition-all duration-300"
+                style={{ width: `${((currentCue + 1) / cues.length) * 100}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Scene Content */}
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 sm:py-6 mobile-bottom-safe">
