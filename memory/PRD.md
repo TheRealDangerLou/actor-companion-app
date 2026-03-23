@@ -32,7 +32,16 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Failed Scene Retry**: Red-flagged tabs for failed scenes, retry card with specific error type badge + message + "Retry This Scene" button. Successful retry replaces the failed placeholder in-place
 - **GPT Timeout Reduced**: Lowered to 55s per scene to stay under proxy timeout (~60s), preventing "Network Error" from proxy drops
 
-### Booked Role Workflow (Feb 2026)
+### Deterministic Line Extraction & Trust Layer (Feb 2026)
+- **Deterministic Parser**: `extract_character_lines()` uses regex pattern matching to find CHARACTER NAME + dialogue blocks from raw script text. Zero GPT, zero credits, zero hallucination
+- **Memorization Override**: Both `/api/analyze/scene` and `/api/analyze/text` now override GPT's memorization data with deterministic extraction after the GPT call returns. GPT handles analysis/takes; lines come from the text itself
+- **`POST /api/parse-lines`**: Standalone endpoint for extracting lines without any analysis. Returns `{character_name, line_count, memorization: {chunked_lines, cue_recall}}`
+- **3-Tab Scene View**: ScriptOverview now has My Lines | Full Scene | Breakdown tabs
+  - **My Lines**: Shows each line with CUE (previous speaker's dialogue) and YOUR LINE, plus Memorize/Run Lines buttons
+  - **Full Scene**: Raw script text in mono font for instant verification
+  - **Breakdown**: AI analysis (beats, takes, subtext)
+- **Booked Role Default**: When prepMode is "booked", My Lines tab is the default view on load
+- **Edge Cases**: Parser handles (V.O.), (CONT'D), parentheticals like (beat), consecutive lines from same character, and scene heading detection
 - **Lines First Landing**: When prepMode is "booked", ScriptOverview shows a prominent hero card with line count, instant "Memorize" and "Run Lines" buttons — lines-first, not analysis-first
 - **Self-Tape Tips Hidden**: Self-Tape Setup card hidden for booked role (not relevant for on-set work)
 - **Component Key Fix**: MemorizationMode and SceneReader now use `key={id}` to force full remount when switching scenes — fixes stale lines/state past scene 1
