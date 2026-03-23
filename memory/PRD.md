@@ -49,6 +49,7 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Prep/Type Storage**: `POST /api/scripts/create` now stores prep_mode and project_type, enabling full context restore on reload
 - **Parallel Batching**: Full script analysis processes scenes in batches of 3 (BATCH_SIZE=3) via Promise.all, reducing ~10 min to ~3 min for 26 scenes
 - **Zero-Credit Rehearsal**: MemorizationMode has zero network calls (pure client-side). SceneReader only calls TTS endpoint. No GPT calls during My Lines, Memorize, Run Lines, or scene navigation
+- **Cost-Free UX**: All cost/credit displays removed from main experience. No dollar amounts, no cost estimation panels, no cache-hit percentages. Internal cost tracking preserved in backend logs only. Deep mode warnings reframed as time-based, not financial
 
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text

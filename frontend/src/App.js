@@ -75,7 +75,7 @@ function MainApp() {
           .join(" | ");
         toast.error(`Analysis incomplete: ${stageInfo || reason}`, { duration: 10000 });
       } else if (result.from_cache || result._debug?.cached) {
-        toast.success("Breakdown ready (from cache — $0.00)");
+        toast.success("Breakdown ready.");
       } else {
         toast.success("Breakdown ready. Time to work.");
       }
@@ -275,19 +275,14 @@ function MainApp() {
 
       const successBreakdowns = finalBreakdowns.filter(b => !b.id?.toString().startsWith("failed-"));
       const cachedCount = successBreakdowns.filter(b => b.from_cache).length;
-      const freshCount = successBreakdowns.length - cachedCount;
-      const COST_MAP = { quick: 0.03, deep: 0.08 };
-      const estCost = freshCount * (COST_MAP[mode] || 0.03);
-      const costSummary = { total: successBreakdowns.length, cached: cachedCount, fresh: freshCount, estimatedCost: estCost };
 
-      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns: finalBreakdowns, costSummary };
+      const result = { script_id, character_name: characterName, mode, prepMode, projectType, breakdowns: finalBreakdowns };
       if (finalBreakdowns.length > 0) {
         setScriptData(result);
         setView("script");
         if (successBreakdowns.length > 0) {
           const parts = [`${successBreakdowns.length} scene${successBreakdowns.length !== 1 ? 's' : ''} analyzed`];
-          if (cachedCount > 0) parts.push(`${cachedCount} from cache`);
-          parts.push(`Est. $${estCost.toFixed(2)}`);
+          if (cachedCount > 0) parts.push(`${cachedCount} instant`);
           toast.success(parts.join(' · '));
         }
       } else {
@@ -333,7 +328,6 @@ function MainApp() {
         prepMode: script.prep_mode,
         projectType: script.project_type,
         breakdowns,
-        costSummary: null,
       });
       setView("script");
       toast.success(`Loaded "${script.character_name}" — ${breakdowns.length} scene${breakdowns.length !== 1 ? "s" : ""}`);

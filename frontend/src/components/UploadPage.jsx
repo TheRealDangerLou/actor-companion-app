@@ -735,7 +735,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                         <div className="flex items-start gap-2 px-1" data-testid="deep-mode-fullscript-warning">
                           <AlertTriangle className="w-3.5 h-3.5 text-amber-500 mt-0.5 shrink-0" />
                           <p className="text-xs text-amber-500/80">
-                            Deep mode costs ~3x more per scene. For full scripts, Quick is recommended — you can always deep-dive individual scenes later.
+                            Deep mode takes longer per scene. For full scripts, Quick is recommended — you can always deep-dive individual scenes later.
                           </p>
                         </div>
                       )}
@@ -986,55 +986,6 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                     );
                   })}
                 </div>
-
-                {/* Cost estimation & warnings */}
-                {selectedScenes.size > 0 && (() => {
-                  const COST_PER_SCENE = { quick: 0.03, deep: 0.08 };
-                  const estCost = selectedScenes.size * COST_PER_SCENE[mode];
-                  const isExpensive = estCost > 0.25;
-                  const isDeepBatch = mode === "deep" && selectedScenes.size > 2;
-
-                  return (
-                    <div
-                      data-testid="cost-estimation"
-                      className={`mt-4 rounded-lg border p-3 ${
-                        isDeepBatch
-                          ? "border-red-500/30 bg-red-500/5"
-                          : isExpensive
-                          ? "border-amber-500/30 bg-amber-500/5"
-                          : "border-zinc-800 bg-zinc-900/30"
-                      }`}
-                    >
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-zinc-400">
-                          {selectedScenes.size} scene{selectedScenes.size > 1 ? "s" : ""} &times; {mode === "deep" ? "Deep" : "Quick"}
-                        </span>
-                        <span
-                          className={
-                            isDeepBatch ? "text-red-400 font-semibold" :
-                            isExpensive ? "text-amber-500 font-semibold" :
-                            "text-zinc-300"
-                          }
-                        >
-                          &asymp; ${estCost.toFixed(2)}
-                        </span>
-                      </div>
-                      {isDeepBatch && (
-                        <div className="flex items-start gap-2 mt-2">
-                          <AlertTriangle className="w-3.5 h-3.5 text-red-400 mt-0.5 shrink-0" />
-                          <p className="text-xs text-red-400">
-                            Deep mode on {selectedScenes.size} scenes is expensive. Quick mode gives great results at ~60% less cost.
-                          </p>
-                        </div>
-                      )}
-                      {!isDeepBatch && isExpensive && (
-                        <p className="text-xs text-amber-500/70 mt-1.5">
-                          Consider analyzing fewer scenes or using Quick mode to save credits.
-                        </p>
-                      )}
-                    </div>
-                  );
-                })()}
 
                 {/* Analyze selected */}
                 <Button

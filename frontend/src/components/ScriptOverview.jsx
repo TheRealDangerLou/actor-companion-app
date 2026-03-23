@@ -13,7 +13,6 @@ import {
   Printer,
   Sparkles,
   Layers,
-  Zap,
   AlertTriangle,
   RotateCcw,
   Loader2,
@@ -39,7 +38,7 @@ export default function ScriptOverview({
 
   if (!scriptData || !scriptData.breakdowns?.length) return null;
 
-  const { breakdowns, character_name, mode, prepMode, costSummary } = scriptData;
+  const { breakdowns, character_name, mode, prepMode } = scriptData;
   const activeBreakdown = breakdowns[activeIndex];
   const isDeep = mode === "deep";
   const isFailed = (b) => b?.id?.toString().startsWith("failed-");
@@ -110,24 +109,6 @@ export default function ScriptOverview({
               );
             })}
           </div>
-
-          {/* Cost summary */}
-          {costSummary && costSummary.total > 0 && (
-            <div data-testid="cost-summary-bar" className="flex items-center gap-2 text-[11px] text-zinc-500 pt-1.5">
-              <Zap className="w-3 h-3 text-zinc-600" />
-              <span>{costSummary.total} scene{costSummary.total !== 1 ? 's' : ''}</span>
-              <span className="text-zinc-700">·</span>
-              {costSummary.cached > 0 && (
-                <>
-                  <span className="text-emerald-500/70">
-                    {Math.round((costSummary.cached / costSummary.total) * 100)}% from cache
-                  </span>
-                  <span className="text-zinc-700">·</span>
-                </>
-              )}
-              <span>Est. ${costSummary.estimatedCost.toFixed(2)}</span>
-            </div>
-          )}
         </div>
       </header>
 
