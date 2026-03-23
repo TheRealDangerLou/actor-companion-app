@@ -105,6 +105,10 @@ def estimate_cost(mode: str) -> float:
 def extract_character_lines(text: str, character_name: str) -> dict:
     """Extract character dialogue from raw script text using pattern matching.
     Returns {chunked_lines, cue_recall} — no GPT call, no credits.
+
+    Strategy:
+    1. Primary pass: Find CHARACTER NAME headers and collect dialogue until a stop signal
+    2. Fallback pass: Scan for any missed lines using loose pattern matching
     """
     if not text or not character_name:
         return {"chunked_lines": [], "cue_recall": []}
@@ -112,54 +116,136 @@ def extract_character_lines(text: str, character_name: str) -> dict:
     char_upper = character_name.strip().upper()
     lines = text.split("\n")
 
-    # Build dialogue blocks: (speaker, dialogue_text)
+    def is_character_name(s):
+        """Check if a line is a character name (ALL CAPS, short, possibly with parenthetical)."""
+        s = s.strip()
+        if not s or len(s) > 60 or len(s) < 2:
+            return False
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
+        if not m:
+            return False
+        name = m.group(1).strip()
+        # Reject scene headings, transitions, page numbers
+        if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|END OF|THE END)', name):
+            return False
+        return True
+
+    def extract_name(s):
+        """Extract the speaker name from a character name line."""
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s.strip())
+        return m.group(1).strip() if m else s.strip()
+
+    def is_action_line(s):
+        """Detect action/description lines that should stop dialogue collection."""
+        s = s.strip()
+        if not s:
+            return True
+        # Page numbers: "8." or "9." or "                    8."
+        if re.match(r'^\d+\.\s*$', s):
+            return True
+        # Starts with lowercase and is long — likely action/description
+        if s[0].islower() and len(s) > 15:
+            return True
+        # Starts with a proper-case name followed by action verb or adverb+verb
+        # e.g., "Ivy grabs...", "Felix enters.", "Ivy instantly lets go"
+        if re.match(r'^[A-Z][a-z]+\s+(?:\w+ly\s+)?(?:enters|exits|turns|walks|grabs|runs|looks|sits|stands|goes|opens|closes|picks|pushes|shakes|approaches|whispers|freezes|shrugs|smiles|answers|laughs|cries|screams|sighs|nods|pauses|points|lets|gets|takes|puts|pulls|drops|falls|stares|stops|starts|moves|leaves|steps|reaches|holds|throws|slaps|kisses|hugs)', s):
+            return True
+        return False
+
+    # --- Primary pass: extract dialogue blocks ---
     dialogue_blocks = []
     i = 0
     while i < len(lines):
         stripped = lines[i].strip()
-        # Match character name line (ALL CAPS, <60 chars, possibly with parenthetical)
-        name_match = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', stripped)
-        if name_match and len(stripped) < 60 and len(stripped) > 1:
-            speaker = name_match.group(1).strip()
-            # Skip if it looks like a scene heading or stage direction
-            if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|END OF)', speaker):
-                i += 1
-                continue
-            # Collect dialogue lines
+        if is_character_name(stripped):
+            speaker = extract_name(stripped)
             dialogue_lines = []
             i += 1
             while i < len(lines):
                 dl = lines[i].strip()
+                # Empty line = end of dialogue block
                 if not dl:
                     break
-                # Stop at another character name
-                if re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', dl) and len(dl) < 60 and len(dl) > 1:
+                # Another character name = end of this speaker's dialogue
+                if is_character_name(dl):
                     break
-                # Stop at scene headings
-                if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s])', dl, re.IGNORECASE):
+                # Scene heading
+                if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
+                    break
+                # Action/description line = end of dialogue
+                if is_action_line(dl):
                     break
                 # Skip parentheticals like (beat), (pause)
                 if re.match(r'^\(.*\)$', dl):
                     i += 1
                     continue
+                # Page number embedded in line
+                if re.match(r'^\d+\.\s*$', dl):
+                    i += 1
+                    continue
                 dialogue_lines.append(dl)
                 i += 1
             if dialogue_lines:
-                dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines)})
+                dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines), "line_idx": i})
+        else:
+            i += 1
+
+    # --- Fallback pass: scan for missed character lines ---
+    # Look for the pattern: char name on one line, dialogue on next, that we might have missed
+    found_texts = {b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or char_upper in b["speaker"].upper()}
+    char_patterns = [char_upper, f"{char_upper} (", f"{char_upper}("]
+
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip().upper()
+        # Check if this line contains the character name as a header
+        matched = False
+        for pat in char_patterns:
+            if stripped.startswith(pat) and is_character_name(lines[i].strip()):
+                matched = True
+                break
+        if matched:
+            # Check if we already have this block
+            # Collect the dialogue
+            fallback_lines = []
+            j = i + 1
+            while j < len(lines):
+                dl = lines[j].strip()
+                if not dl or is_character_name(dl) or is_action_line(dl):
+                    break
+                if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
+                    j += 1
+                    continue
+                fallback_lines.append(dl)
+                j += 1
+            if fallback_lines:
+                fb_text = " ".join(fallback_lines)
+                # Check if this text is already captured
+                if fb_text not in found_texts:
+                    # Find insertion point (maintain script order)
+                    insert_idx = len(dialogue_blocks)
+                    for di, db in enumerate(dialogue_blocks):
+                        if db["line_idx"] > i:
+                            insert_idx = di
+                            break
+                    dialogue_blocks.insert(insert_idx, {"speaker": extract_name(lines[i].strip()), "text": fb_text, "line_idx": j})
+                    found_texts.add(fb_text)
+                    logger.info(f"[PARSE] Fallback recovered line for {character_name}: '{fb_text[:50]}...'")
+            i = j if fallback_lines else i + 1
         else:
             i += 1
 
     if not dialogue_blocks:
         return {"chunked_lines": [], "cue_recall": []}
 
-    # Build cue_recall: for each character line, the cue is the previous speaker's last line
+    # Build cue_recall
     cue_recall = []
     for idx, block in enumerate(dialogue_blocks):
         if block["speaker"].upper() == char_upper or char_upper in block["speaker"].upper():
             cue = "(Scene start)" if idx == 0 else f'{dialogue_blocks[idx - 1]["speaker"]}: {dialogue_blocks[idx - 1]["text"]}'
             cue_recall.append({"cue": cue, "your_line": block["text"]})
 
-    # Build chunked_lines: groups of 2-3
+    # Build chunked_lines
     char_lines = [b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or char_upper in b["speaker"].upper()]
     chunked_lines = []
     for ci in range(0, len(char_lines), 3):
