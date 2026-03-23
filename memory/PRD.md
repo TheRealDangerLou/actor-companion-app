@@ -23,42 +23,31 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Prompt Optimization**: REGENERATE_TAKES_PROMPT and ADJUST_TAKES_PROMPT reduced by ~60% token count
 - **Scene Text Hard Cap**: 8000 chars max before any processing (SCENE_TEXT_HARD_CAP)
 - **Text Truncation**: regenerate-takes now only sends first 3000 chars of scene text
-- **Frontend Cost Warnings**: Estimated cost display in Full Script step 4 ($0.03/quick, $0.08/deep per scene)
-- **Deep Mode Warning**: Alert when Deep mode selected for Full Script (recommends Quick)
 - **Submission Guards**: isSubmitting state prevents duplicate button clicks
-- **Post-Run Cost Feedback**: Toast after batch shows "X scenes · Y from cache · Est. $Z"; single analysis shows "from cache — $0.00" when cached
-- **Cost Summary Bar**: Subtle stat line in ScriptOverview header showing scene count, cache hit %, and estimated cost
-- **Scene-Level Error Reporting**: Backend categorizes errors into 402 (budget), 429 (rate limit), 503 (service unavailable), 504 (timeout), 500 (other). Frontend maps each to a user-facing label instead of generic "Network Error"
-- **Failed Scene Retry**: Red-flagged tabs for failed scenes, retry card with specific error type badge + message + "Retry This Scene" button. Successful retry replaces the failed placeholder in-place
-- **GPT Timeout Reduced**: Lowered to 55s per scene to stay under proxy timeout (~60s), preventing "Network Error" from proxy drops
+- **Scene-Level Error Reporting**: Backend categorizes errors into 402 (budget), 429 (rate limit), 503 (service unavailable), 504 (timeout), 500 (other). Frontend maps each to a user-facing label
+- **Failed Scene Retry**: Red-flagged tabs for failed scenes, retry card with specific error type badge + message + "Retry This Scene" button
+- **GPT Timeout Reduced**: Lowered to 55s per scene to stay under proxy timeout (~60s)
 
 ### Deterministic Line Extraction & Trust Layer (Feb 2026)
 - **Deterministic Parser**: `extract_character_lines()` uses regex pattern matching to find CHARACTER NAME + dialogue blocks from raw script text. Zero GPT, zero credits, zero hallucination
-- **Memorization Override**: Both `/api/analyze/scene` and `/api/analyze/text` now override GPT's memorization data with deterministic extraction after the GPT call returns. GPT handles analysis/takes; lines come from the text itself
-- **`POST /api/parse-lines`**: Standalone endpoint for extracting lines without any analysis. Returns `{character_name, line_count, memorization: {chunked_lines, cue_recall}}`
+- **Memorization Override**: Both `/api/analyze/scene` and `/api/analyze/text` now override GPT's memorization data with deterministic extraction after the GPT call returns
+- **`POST /api/parse-lines`**: Standalone endpoint for extracting lines without any analysis
 - **3-Tab Scene View**: ScriptOverview now has My Lines | Full Scene | Breakdown tabs
-  - **My Lines**: Shows each line with CUE (previous speaker's dialogue) and YOUR LINE, plus Memorize/Run Lines buttons
-  - **Full Scene**: Raw script text in mono font for instant verification
-  - **Breakdown**: AI analysis (beats, takes, subtext)
 - **Booked Role Default**: When prepMode is "booked", My Lines tab is the default view on load
-- **Edge Cases**: Parser handles (V.O.), (CONT'D), parentheticals like (beat), consecutive lines from same character, and scene heading detection
-- **Lines First Landing**: When prepMode is "booked", ScriptOverview shows a prominent hero card with line count, instant "Memorize" and "Run Lines" buttons — lines-first, not analysis-first
-- **Self-Tape Tips Hidden**: Self-Tape Setup card hidden for booked role (not relevant for on-set work)
-- **Component Key Fix**: MemorizationMode and SceneReader now use `key={id}` to force full remount when switching scenes — fixes stale lines/state past scene 1
-- **PrepMode Propagation**: prepMode flows from ScriptOverview → BreakdownView, enabling mode-aware rendering throughout
+- **Lines First Landing**: Prominent hero card with line count, instant "Memorize" and "Run Lines" buttons
+- **Parser Validation (Feb 2026)**: 38/38 regression tests passing — covers action text filtering, dialogue continuations, parentheticals, dense formatting, cue accuracy, chunking, edge cases. Zero code changes needed.
 
 ### Genre-Aware Analysis (Feb 2026)
 - **Vertical / Soap project type**: New option for vertical short-form drama and soap-style series
-- **Episode Parser**: Scene splitter now recognizes `EPISODE X`, `EP X`, `EP. X`, `CHAPTER X`, and `#X` markers (Tier 3, after INT/EXT and SCENE/ACT)
-- **Genre Direction Injection**: When project_type is "vertical", GPT receives specific genre context: heightened acting, faster turns, stronger reversals, camera-conscious physicality, tight memorization chunks
+- **Episode Parser**: Scene splitter now recognizes `EPISODE X`, `EP X`, `EP. X`, `CHAPTER X`, and `#X` markers
+- **Genre Direction Injection**: When project_type is "vertical", GPT receives specific genre context
 
 ### Script Persistence & Performance (Feb 2026)
-- **My Scripts List**: `GET /api/scripts` returns recent scripts with metadata (character_name, mode, breakdown_count, prep_mode, project_type). Shown on landing page as "My Scripts" section
-- **Script Loading**: Clicking a script loads all breakdowns via `GET /api/scripts/{id}` — zero GPT calls, instant access to rehearsal tools
-- **Prep/Type Storage**: `POST /api/scripts/create` now stores prep_mode and project_type, enabling full context restore on reload
-- **Parallel Batching**: Full script analysis processes scenes in batches of 3 (BATCH_SIZE=3) via Promise.all, reducing ~10 min to ~3 min for 26 scenes
-- **Zero-Credit Rehearsal**: MemorizationMode has zero network calls (pure client-side). SceneReader only calls TTS endpoint. No GPT calls during My Lines, Memorize, Run Lines, or scene navigation
-- **Cost-Free UX**: All cost/credit displays removed from main experience. No dollar amounts, no cost estimation panels, no cache-hit percentages. Internal cost tracking preserved in backend logs only. Deep mode warnings reframed as time-based, not financial
+- **My Scripts List**: `GET /api/scripts` returns recent scripts with metadata
+- **Script Loading**: Clicking a script loads all breakdowns via `GET /api/scripts/{id}` — zero GPT calls
+- **Parallel Batching**: Full script analysis processes scenes in batches of 3 via Promise.all
+- **Zero-Credit Rehearsal**: MemorizationMode has zero network calls. SceneReader only calls TTS endpoint
+- **Cost-Free UX**: All cost/credit displays removed from main experience
 
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
@@ -71,28 +60,15 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - Scene detection: regex (INT./EXT.) + GPT fallback
 - Prep Mode: Audition / Booked / Silent / Study
 - Project Type: Commercial / TV-Film / Theatre / Voiceover
-- Per-scene analysis (avoids proxy timeouts)
-- Budget-aware: Detects 402 (budget) / 429 (rate limit), stops batch immediately
-- Per-scene action bar with adaptive tools
-- ScriptOverview with scene tabs
+- Per-scene analysis with parallel batching
 
 ### Adjustment Loop (Performance Feedback)
-- 5 adjustment options: Tighten pacing, Add depth, More natural, Raise stakes, Play the opposite
+- 5 adjustment options
 - Adjustments stack (each builds on previous)
 - Only acting takes regenerated (fast ~10s)
-- Inline panel below acting takes in BreakdownView
-- Post-action card: floating card after closing Scene Reader/Memorization
-- Adjustment history stored per breakdown
 
 ### Voice Selection for Scene Reader
 - 10 curated ElevenLabs voices
-- Voice picker dropdown in Scene Reader
-
-### Clarification Toggles
-- 8 quick-tap flags: Cold read, Comedic, Dramatic, Antagonist, Callback, Self-tape, Chemistry read, Under-5
-
-### Scene Reader (AI Voice Partner)
-- Voice-responsive "Run Lines", iOS-safe, graceful degradation
 
 ### Memorization Suite (4 modes)
 - My Lines, Line Run, Reader, Cue & Recall
@@ -103,11 +79,12 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - `POST /api/analyze/scene` — Analyze single scene (with caching)
 - `POST /api/adjust-takes/{id}` — Adjust acting takes with stacking feedback
 - `POST /api/parse-scenes` — Parse full script into scenes
+- `POST /api/parse-lines` — Deterministic line extraction (zero GPT)
 - `POST /api/scripts/create` — Initialize script record
 - `GET /api/scripts/{id}` — Retrieve full script with breakdowns
 - `POST /api/tts/generate` — TTS audio (accepts voice_id)
 - `GET /api/tts/voices` — 10 curated voices
-- `POST /api/check-cache` — Check if a breakdown is cached (single)
+- `POST /api/check-cache` — Check if a breakdown is cached
 - `POST /api/check-cache/batch` — Check cache status for multiple scenes
 - `GET /api/debug/pipeline` — System health check (no GPT call)
 
@@ -119,3 +96,8 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - [ ] Casting Director POV
 - [ ] User accounts & auth
 - [ ] Memorization Timer
+
+## Current Status
+- **Parser**: Stable, 38/38 regression tests passing. Awaiting user validation on live script.
+- **App**: Fully functional, no known bugs.
+- **Priority**: Stabilization only. No new features until user confirms parser reliability.
