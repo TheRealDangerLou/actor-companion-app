@@ -1,0 +1,104 @@
+{
+  "summary": "Completed testing of Script Persistence features (iteration 21). All 4 priorities verified: 1) Parallel batching BATCH_SIZE=3 confirmed at App.js line 181. 2) Script persistence working - GET /api/scripts lists recent scripts, GET /api/scripts/{id} returns full script with breakdowns, no re-analysis on reload. 3) Rehearsal tools (MemorizationMode, SceneReader) work without GPT calls - MemorizationMode has ZERO network calls, SceneReader only calls /api/tts/generate. 4) Cost safety verified - loading persisted scripts does NOT trigger /api/analyze calls.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: API root endpoint accessible - PASS",
+    "Backend: GET /api/scripts returns list of recent scripts - PASS (found 5+ scripts)",
+    "Backend: Scripts list has required fields (id, character_name, mode, created_at, breakdown_count) - PASS",
+    "Backend: Scripts list includes prep_mode and project_type fields - PASS",
+    "Backend: GET /api/scripts/{id} returns full script with breakdowns array - PASS",
+    "Backend: Breakdowns have all required fields (scene_summary, character_objective, stakes, beats, acting_takes, memorization, self_tape_tips) - PASS",
+    "Backend: Non-existent script returns 404 - PASS",
+    "Backend: POST /api/scripts/create stores prep_mode and project_type - PASS",
+    "Backend: Script with booked prep_mode created successfully - PASS",
+    "Backend: Script with vertical project_type created successfully - PASS",
+    "Backend: Script load does NOT trigger GPT analysis (fast response <5s) - PASS",
+    "Backend: breakdown_count matches actual breakdowns count - PASS",
+    "Backend: Multiple loads return identical data (no re-analysis) - PASS",
+    "Frontend: Landing page shows 'My Scripts' section - PASS",
+    "Frontend: My Scripts section shows 5 recent scripts with metadata - PASS",
+    "Frontend: Clicking script loads ScriptOverview with scene tabs - PASS (Felix with 21 scenes)",
+    "Frontend: Toast shows 'Loaded \"Felix\" — 21 scenes' - PASS",
+    "Frontend: Scene tabs visible and navigable - PASS (21 tabs)",
+    "Frontend: Action bar shows Run Lines, Memorize, Go Deeper buttons - PASS",
+    "Frontend: Scene Summary, Objective, Stakes, Beat Breakdown visible - PASS",
+    "Frontend: No /api/analyze calls when loading persisted script - PASS",
+    "Frontend: Script loaded via GET /api/scripts/{id} only - PASS",
+    "Frontend: MemorizationMode has ZERO network calls - PASS (verified via code and runtime)",
+    "Frontend: SceneReader only calls /api/tts/generate (TTS, not GPT) - PASS",
+    "Frontend: BATCH_SIZE=3 confirmed in App.js line 181 - PASS"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_script_persistence.py",
+    "/app/test_reports/pytest/script_persistence_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "App.js line 181: BATCH_SIZE = 3 correctly set for parallel batching",
+    "App.js lines 318-344: handleLoadScript correctly loads script via GET /api/scripts/{id} without triggering analysis",
+    "App.js lines 42-43: recentScripts fetched on mount via GET /api/scripts",
+    "UploadPage.jsx lines 1068-1108: My Scripts section correctly displays recent scripts with data-testid='recent-script-{id}'",
+    "MemorizationMode.jsx: ZERO axios/fetch imports - purely client-side rehearsal tool",
+    "SceneReader.jsx line 92: Only network call is axios.post to /api/tts/generate for TTS",
+    "server.py lines 1392-1398: GET /api/scripts returns list with breakdown_count computed from breakdown_ids",
+    "server.py lines 1401-1417: GET /api/scripts/{id} returns full script with all breakdowns embedded",
+    "server.py lines 1421-1436: POST /api/scripts/create stores prep_mode and project_type"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_script_persistence.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 tests passed)",
+    "frontend": "100% (12/12 UI checks passed)"
+  },
+  "seed_data_creation": "Created TEST_PersistenceTest, TEST_BookedRole, TEST_VerticalProject scripts for testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Script persistence feature fully implemented and tested. Key flows: 1) GET /api/scripts lists recent scripts with metadata (breakdown_count, prep_mode, project_type). 2) GET /api/scripts/{id} returns full script with all breakdowns embedded - NO GPT calls. 3) Frontend My Scripts section on landing page loads scripts instantly. 4) MemorizationMode is 100% client-side (no network calls). 5) SceneReader only calls /api/tts/generate for TTS. 6) BATCH_SIZE=3 for parallel scene analysis.",
+  "features_verified": {
+    "parallel_batching_batch_size_3": {
+      "status": "WORKING",
+      "details": "BATCH_SIZE = 3 at App.js line 181, scenes processed in parallel batches"
+    },
+    "script_persistence_list": {
+      "status": "WORKING",
+      "details": "GET /api/scripts returns list with id, character_name, mode, breakdown_count, prep_mode, project_type, created_at"
+    },
+    "script_persistence_load": {
+      "status": "WORKING",
+      "details": "GET /api/scripts/{id} returns full script with all breakdowns - no GPT calls"
+    },
+    "my_scripts_section": {
+      "status": "WORKING",
+      "details": "Landing page shows My Scripts section with recent scripts, clicking loads ScriptOverview"
+    },
+    "toast_on_load": {
+      "status": "WORKING",
+      "details": "Toast shows 'Loaded \"CharacterName\" — X scenes' format"
+    },
+    "no_reanalysis_on_reload": {
+      "status": "WORKING",
+      "details": "Loading persisted script does NOT trigger /api/analyze calls - verified via network monitoring"
+    },
+    "memorization_mode_no_network": {
+      "status": "WORKING",
+      "details": "MemorizationMode.jsx has ZERO axios/fetch imports - purely client-side"
+    },
+    "scene_reader_tts_only": {
+      "status": "WORKING",
+      "details": "SceneReader.jsx only calls /api/tts/generate (line 92) - no GPT calls"
+    },
+    "prep_mode_project_type_storage": {
+      "status": "WORKING",
+      "details": "POST /api/scripts/create stores prep_mode and project_type, returned in GET responses"
+    }
+  }
+}

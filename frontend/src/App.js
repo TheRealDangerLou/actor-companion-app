@@ -25,6 +25,7 @@ function MainApp() {
   const [sceneReaderOpen, setSceneReaderOpen] = useState(false);
   const [ttsAvailable, setTtsAvailable] = useState(false);
   const [recentBreakdowns, setRecentBreakdowns] = useState([]);
+  const [recentScripts, setRecentScripts] = useState([]);
   const [activeScriptBreakdown, setActiveScriptBreakdown] = useState(null);
   const [voices, setVoices] = useState([]);
   const [showPostActionAdjust, setShowPostActionAdjust] = useState(false);
@@ -39,6 +40,7 @@ function MainApp() {
       }
     }).catch(() => {});
     axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
+    axios.get(`${API}/scripts`).then(r => setRecentScripts(r.data || [])).catch(() => {});
   }, []);
 
   const handleAnalyze = useCallback(async (data) => {
@@ -170,6 +172,8 @@ function MainApp() {
         character_name: characterName,
         mode,
         scene_count: scenes.length,
+        prep_mode: prepMode,
+        project_type: projectType,
       }, { timeout: 15000 });
       const { script_id } = createResp.data;
 
@@ -290,6 +294,7 @@ function MainApp() {
         toast.error("No scenes could be analyzed. Check your LLM key balance.");
       }
       axios.get(`${API}/breakdowns`).then(r => setRecentBreakdowns(r.data || [])).catch(() => {});
+      axios.get(`${API}/scripts`).then(r => setRecentScripts(r.data || [])).catch(() => {});
     } catch (error) {
       const msg = error.response?.data?.detail || error.message || "Failed to start analysis";
       toast.error(msg, { duration: 8000 });
@@ -306,6 +311,34 @@ function MainApp() {
       setView("breakdown");
     } catch {
       toast.error("Could not load this breakdown.");
+    }
+    setLoading(false);
+  }, []);
+
+  const handleLoadScript = useCallback(async (scriptId) => {
+    setLoading(true);
+    try {
+      const response = await axios.get(`${API}/scripts/${scriptId}`);
+      const script = response.data;
+      const breakdowns = script.breakdowns || [];
+      if (breakdowns.length === 0) {
+        toast.error("This script has no analyzed scenes.");
+        setLoading(false);
+        return;
+      }
+      setScriptData({
+        script_id: script.id,
+        character_name: script.character_name,
+        mode: script.mode,
+        prepMode: script.prep_mode,
+        projectType: script.project_type,
+        breakdowns,
+        costSummary: null,
+      });
+      setView("script");
+      toast.success(`Loaded "${script.character_name}" — ${breakdowns.length} scene${breakdowns.length !== 1 ? "s" : ""}`);
+    } catch {
+      toast.error("Could not load this script.");
     }
     setLoading(false);
   }, []);
@@ -376,7 +409,7 @@ function MainApp() {
         )}
         {!loading && view === "upload" && (
           <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-            <UploadPage onAnalyze={handleAnalyze} onFullScriptAnalyze={handleFullScriptAnalyze} recentBreakdowns={recentBreakdowns} onLoadBreakdown={handleLoadBreakdown} />
+            <UploadPage onAnalyze={handleAnalyze} onFullScriptAnalyze={handleFullScriptAnalyze} recentBreakdowns={recentBreakdowns} recentScripts={recentScripts} onLoadBreakdown={handleLoadBreakdown} onLoadScript={handleLoadScript} />
           </motion.div>
         )}
         {!loading && view === "breakdown" && breakdown && (

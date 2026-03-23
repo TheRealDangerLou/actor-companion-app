@@ -29,7 +29,7 @@ const stepAnim = {
   transition: { duration: 0.2 },
 };
 
-export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreakdowns, onLoadBreakdown }) {
+export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreakdowns, recentScripts, onLoadBreakdown, onLoadScript }) {
   const [step, setStep] = useState(1);
   const [inputType, setInputType] = useState(null); // "text" | "file" | "snap" | "fullscript"
   const [scriptText, setScriptText] = useState("");
@@ -1064,6 +1064,50 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
             )}
           </AnimatePresence>
         </motion.div>
+
+        {/* Recent Scripts (full script projects) */}
+        {step === 1 && recentScripts && recentScripts.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5, delay: 0.2 }}
+            className="mt-6"
+          >
+            <div className="flex items-center gap-2 mb-3 px-1">
+              <Layers className="w-3.5 h-3.5 text-amber-500/60" />
+              <span className="text-xs text-amber-500/60 uppercase tracking-wider font-medium">My Scripts</span>
+            </div>
+            <div className="space-y-2">
+              {recentScripts.slice(0, 5).map((s) => (
+                <button
+                  key={s.id}
+                  data-testid={`recent-script-${s.id}`}
+                  onClick={() => onLoadScript(s.id)}
+                  className="w-full text-left bg-zinc-950/40 border border-zinc-800/60 rounded-lg px-4 py-3 hover:border-amber-500/30 hover:bg-zinc-900/40 transition-all group"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm text-zinc-300 font-medium truncate group-hover:text-amber-500 transition-colors">
+                        {s.character_name || "Untitled"}
+                      </p>
+                      <p className="text-xs text-zinc-600 mt-0.5">
+                        {s.breakdown_count || 0} scene{(s.breakdown_count || 0) !== 1 ? "s" : ""}
+                        {s.mode === "deep" ? " · Deep" : " · Quick"}
+                        {s.project_type === "vertical" ? " · Vertical" : ""}
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {s.prep_mode === "booked" && <span className="text-[9px] text-emerald-500/60 border border-emerald-500/20 rounded px-1">BOOKED</span>}
+                      <span className="text-[10px] text-zinc-700">
+                        {s.created_at ? new Date(s.created_at).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : ""}
+                      </span>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* Recent Breakdowns */}
         {step === 1 && recentBreakdowns && recentBreakdowns.length > 0 && (

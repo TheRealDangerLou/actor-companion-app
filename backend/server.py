@@ -183,6 +183,8 @@ class CreateScriptRequest(BaseModel):
     character_name: str
     mode: Optional[str] = "quick"
     scene_count: int
+    prep_mode: Optional[str] = None
+    project_type: Optional[str] = None
 
 class AdjustTakesRequest(BaseModel):
     adjustments: List[str]  # stacking list: ["tighten_pacing", "raise_stakes"]
@@ -1387,6 +1389,15 @@ async def analyze_batch(request: BatchAnalyzeRequest):
     }
 
 
+@api_router.get("/scripts")
+async def list_scripts():
+    """List recent scripts with metadata (no full breakdowns)."""
+    scripts = await db.scripts.find({}, {"_id": 0}).sort("created_at", -1).to_list(20)
+    for s in scripts:
+        s["breakdown_count"] = len(s.get("breakdown_ids", []))
+    return scripts
+
+
 @api_router.get("/scripts/{script_id}")
 async def get_script(script_id: str):
     """Retrieve a full script analysis with all its scene breakdowns."""
@@ -1416,6 +1427,8 @@ async def create_script(request: CreateScriptRequest):
         "character_name": request.character_name.strip(),
         "mode": request.mode or "quick",
         "scene_count": request.scene_count,
+        "prep_mode": request.prep_mode,
+        "project_type": request.project_type,
         "breakdown_ids": [],
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
