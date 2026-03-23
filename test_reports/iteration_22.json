@@ -1,0 +1,123 @@
+{
+  "summary": "Completed testing of Deterministic Line Extraction (Zero GPT) features - Iteration 22. All features verified: 1) POST /api/parse-lines extracts character lines deterministically without GPT. 2) cue_recall format correct with cue (previous speaker's line) and your_line. 3) Edge cases handled: (V.O.), (CONT'D), multiple consecutive lines, parentheticals skipped. 4) Frontend ScriptOverview has 3 view tabs: My Lines, Full Scene, Breakdown. 5) For booked role, My Lines is default view. 6) My Lines view shows correct line count, cue text (italic/dimmed), and your_line (bright).",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "Backend: API root endpoint accessible - PASS",
+    "Backend: POST /api/parse-lines returns correct structure (character_name, line_count, memorization) - PASS",
+    "Backend: parse-lines extracts 2 lines for JOHN from standard screenplay format - PASS",
+    "Backend: parse-lines returns correct cue_recall with cue and your_line - PASS",
+    "Backend: First line cue is '(Scene start)' when character speaks first - PASS",
+    "Backend: Subsequent cues include previous speaker name and line - PASS",
+    "Backend: parse-lines handles (V.O.) parenthetical correctly - PASS",
+    "Backend: parse-lines handles (CONT'D) parenthetical correctly - PASS",
+    "Backend: parse-lines handles multiple consecutive lines from same character - PASS",
+    "Backend: parse-lines creates chunked_lines in groups of 3 - PASS",
+    "Backend: parse-lines returns empty result for empty text - PASS",
+    "Backend: parse-lines returns 0 lines when character not found - PASS",
+    "Backend: parse-lines is case-insensitive for character matching - PASS",
+    "Backend: parse-lines skips parentheticals like (beat), (pause) in dialogue - PASS",
+    "Backend: parse-lines skips scene headings (INT./EXT.) - PASS",
+    "Backend: analyze/text includes deterministic memorization override - PASS",
+    "Frontend: ScriptOverview component loads correctly - PASS",
+    "Frontend: Scene view tabs container found (data-testid='scene-view-tabs') - PASS",
+    "Frontend: My Lines tab found (data-testid='scene-view-lines') - PASS",
+    "Frontend: Full Scene tab found (data-testid='scene-view-fulltext') - PASS",
+    "Frontend: Breakdown tab found (data-testid='scene-view-breakdown') - PASS",
+    "Frontend: My Lines view displayed (data-testid='my-lines-view') - PASS",
+    "Frontend: My Lines view shows 4 line cards with cue_recall format - PASS",
+    "Frontend: Memorize button found in My Lines view - PASS",
+    "Frontend: Run Lines button found in My Lines view - PASS",
+    "Frontend: Full Scene view displayed (data-testid='full-scene-view') - PASS",
+    "Frontend: Full Scene has pre element for raw text in mono font - PASS",
+    "Frontend: Breakdown view displays AI analysis - PASS",
+    "Frontend: For booked role, My Lines tab is active by default - PASS",
+    "Frontend: Lines-first hero card visible for booked role - PASS",
+    "Frontend: Line count displayed correctly ('4 lines in this scene') - PASS",
+    "Frontend: View persists when navigating between scenes - PASS",
+    "Frontend: Scene tabs navigable (21 tabs for Felix script) - PASS"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_deterministic_lines.py",
+    "/app/test_reports/pytest/deterministic_lines_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py lines 105-173: extract_character_lines() correctly implements deterministic parsing with regex",
+    "server.py lines 1670-1678: POST /api/parse-lines endpoint returns correct structure",
+    "server.py lines 801-807: analyze/text overrides GPT memorization with deterministic extraction",
+    "server.py lines 1586-1589: analyze/scene overrides GPT memorization with deterministic extraction",
+    "ScriptOverview.jsx lines 40-51: sceneView state with defaultView logic for booked role",
+    "ScriptOverview.jsx lines 211-230: View mode tabs with correct data-testid attributes",
+    "ScriptOverview.jsx lines 385-425: My Lines view with cue_recall cards showing CUE and YOUR LINE",
+    "ScriptOverview.jsx lines 426-439: Full Scene text view with pre element and mono font"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_deterministic_lines.py"
+  ],
+  "success_rate": {
+    "backend": "100% (13/13 pytest tests passed)",
+    "frontend": "100% (16/16 UI checks passed)"
+  },
+  "seed_data_creation": "Used existing Felix script (21 scenes, booked mode) for testing",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Deterministic line extraction feature fully implemented and tested. Key flows: 1) POST /api/parse-lines accepts {text, character_name} and returns {character_name, line_count, memorization: {chunked_lines, cue_recall}}. 2) cue_recall format: {cue: previous speaker's line or '(Scene start)', your_line: character's dialogue}. 3) Both analyze/text and analyze/scene override GPT memorization with deterministic extraction. 4) Frontend ScriptOverview has 3 view tabs: 'lines' (My Lines), 'fulltext' (Full Scene), 'breakdown' (AI Analysis). 5) For booked role (prepMode='booked'), My Lines is default view. 6) My Lines view shows cue_recall cards with CUE label (dimmed/italic) and YOUR LINE label (bright).",
+  "features_verified": {
+    "parse_lines_endpoint": {
+      "status": "WORKING",
+      "details": "POST /api/parse-lines extracts character lines deterministically without GPT calls"
+    },
+    "cue_recall_format": {
+      "status": "WORKING",
+      "details": "Returns {cue: previous speaker's line, your_line: character's dialogue} for each line"
+    },
+    "chunked_lines_grouping": {
+      "status": "WORKING",
+      "details": "Groups lines in chunks of 3 with chunk_label and lines fields"
+    },
+    "edge_cases_vo_contd": {
+      "status": "WORKING",
+      "details": "Handles (V.O.), (CONT'D), multiple consecutive lines, parentheticals skipped"
+    },
+    "deterministic_override_analyze_text": {
+      "status": "WORKING",
+      "details": "analyze/text overrides GPT memorization with deterministic extraction after GPT call"
+    },
+    "deterministic_override_analyze_scene": {
+      "status": "WORKING",
+      "details": "analyze/scene overrides GPT memorization with deterministic extraction after GPT call"
+    },
+    "frontend_view_tabs": {
+      "status": "WORKING",
+      "details": "ScriptOverview has 3 tabs: My Lines, Full Scene, Breakdown with correct data-testid"
+    },
+    "booked_role_default_view": {
+      "status": "WORKING",
+      "details": "For prepMode='booked', My Lines tab is active by default"
+    },
+    "my_lines_view_format": {
+      "status": "WORKING",
+      "details": "Shows cue_recall cards with CUE (italic/dimmed) and YOUR LINE (bright) labels"
+    },
+    "full_scene_view": {
+      "status": "WORKING",
+      "details": "Shows raw scene text in pre element with mono font"
+    },
+    "memorize_run_lines_buttons": {
+      "status": "WORKING",
+      "details": "My Lines view has Memorize and Run Lines buttons"
+    },
+    "lines_first_hero_card": {
+      "status": "WORKING",
+      "details": "Booked role shows hero card with line count and quick action buttons"
+    }
+  }
+}

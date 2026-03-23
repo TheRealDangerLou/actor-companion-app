@@ -100,6 +100,84 @@ def estimate_cost(mode: str) -> float:
     return 0.08 if mode == "deep" else 0.03
 
 
+# --- Deterministic Line Extraction (zero GPT) ---
+
+def extract_character_lines(text: str, character_name: str) -> dict:
+    """Extract character dialogue from raw script text using pattern matching.
+    Returns {chunked_lines, cue_recall} — no GPT call, no credits.
+    """
+    if not text or not character_name:
+        return {"chunked_lines": [], "cue_recall": []}
+
+    char_upper = character_name.strip().upper()
+    lines = text.split("\n")
+
+    # Build dialogue blocks: (speaker, dialogue_text)
+    dialogue_blocks = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        # Match character name line (ALL CAPS, <60 chars, possibly with parenthetical)
+        name_match = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', stripped)
+        if name_match and len(stripped) < 60 and len(stripped) > 1:
+            speaker = name_match.group(1).strip()
+            # Skip if it looks like a scene heading or stage direction
+            if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|END OF)', speaker):
+                i += 1
+                continue
+            # Collect dialogue lines
+            dialogue_lines = []
+            i += 1
+            while i < len(lines):
+                dl = lines[i].strip()
+                if not dl:
+                    break
+                # Stop at another character name
+                if re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', dl) and len(dl) < 60 and len(dl) > 1:
+                    break
+                # Stop at scene headings
+                if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s])', dl, re.IGNORECASE):
+                    break
+                # Skip parentheticals like (beat), (pause)
+                if re.match(r'^\(.*\)$', dl):
+                    i += 1
+                    continue
+                dialogue_lines.append(dl)
+                i += 1
+            if dialogue_lines:
+                dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines)})
+        else:
+            i += 1
+
+    if not dialogue_blocks:
+        return {"chunked_lines": [], "cue_recall": []}
+
+    # Build cue_recall: for each character line, the cue is the previous speaker's last line
+    cue_recall = []
+    for idx, block in enumerate(dialogue_blocks):
+        if block["speaker"].upper() == char_upper or char_upper in block["speaker"].upper():
+            cue = "(Scene start)" if idx == 0 else f'{dialogue_blocks[idx - 1]["speaker"]}: {dialogue_blocks[idx - 1]["text"]}'
+            cue_recall.append({"cue": cue, "your_line": block["text"]})
+
+    # Build chunked_lines: groups of 2-3
+    char_lines = [b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or char_upper in b["speaker"].upper()]
+    chunked_lines = []
+    for ci in range(0, len(char_lines), 3):
+        chunk = char_lines[ci:ci + 3]
+        chunked_lines.append({
+            "chunk_label": f"Chunk {ci // 3 + 1} ({len(chunk)} line{'s' if len(chunk) != 1 else ''})",
+            "lines": "\n".join(chunk),
+        })
+
+    logger.info(f"[PARSE] Deterministic: {len(cue_recall)} lines for '{character_name}' (0 GPT calls)")
+    return {"chunked_lines": chunked_lines, "cue_recall": cue_recall}
+
+
+class ParseLinesRequest(BaseModel):
+    text: str
+    character_name: str
+
+
 # --- Models ---
 class AnalyzeTextRequest(BaseModel):
     text: str
@@ -719,6 +797,14 @@ async def analyze_text(request: AnalyzeTextRequest):
             timeout=gpt_timeout
         )
         stages.append({"stage": "gpt_analysis", "ok": True})
+
+        # Override GPT memorization with deterministic extraction if character found
+        gpt_char = result.get("character_name", "")
+        if gpt_char:
+            det_mem = extract_character_lines(input_text, gpt_char)
+            if det_mem["cue_recall"]:
+                result["memorization"] = det_mem
+                stages.append({"stage": "deterministic_lines", "ok": True, "lines": len(det_mem["cue_recall"])})
     except asyncio.TimeoutError:
         stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after 90s"})
         logger.error("[analyze/text] GPT timed out")
@@ -1497,6 +1583,11 @@ async def analyze_single_scene(request: SingleSceneRequest):
             timeout=gpt_timeout
         )
 
+        # Override GPT memorization with deterministic extraction (exact lines, zero hallucination)
+        det_mem = extract_character_lines(scene_text, character_name)
+        if det_mem["cue_recall"]:
+            result["memorization"] = det_mem
+
         # Cache for future reuse
         await store_cached_breakdown(cache_key, result, mode, character_name)
 
@@ -1573,6 +1664,17 @@ async def check_cache_batch(request: BatchCheckCacheRequest):
         "uncached": uncached,
         "estimated_cost": round(uncached * estimate_cost(mode), 2),
         "scenes": scene_results,
+    }
+
+
+@api_router.post("/parse-lines")
+async def parse_lines(request: ParseLinesRequest):
+    """Deterministic line extraction — zero GPT, zero credits."""
+    result = extract_character_lines(request.text, request.character_name)
+    return {
+        "character_name": request.character_name,
+        "line_count": len(result["cue_recall"]),
+        "memorization": result,
     }
 
 

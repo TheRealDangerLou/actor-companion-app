@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,6 +16,8 @@ import {
   AlertTriangle,
   RotateCcw,
   Loader2,
+  FileText,
+  List,
 } from "lucide-react";
 import BreakdownView from "@/components/BreakdownView";
 
@@ -35,10 +37,22 @@ export default function ScriptOverview({
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [retrying, setRetrying] = useState(false);
+  const [sceneView, setSceneView] = useState("breakdown"); // "breakdown" | "lines" | "fulltext"
+  const initialSet = useRef(false);
+
+  const prepMode = scriptData?.prepMode;
+  const defaultView = prepMode === "booked" ? "lines" : "breakdown";
+
+  useEffect(() => {
+    if (!initialSet.current && scriptData?.breakdowns?.length) {
+      setSceneView(defaultView);
+      initialSet.current = true;
+    }
+  }, [defaultView, scriptData]);
 
   if (!scriptData || !scriptData.breakdowns?.length) return null;
 
-  const { breakdowns, character_name, mode, prepMode } = scriptData;
+  const { breakdowns, character_name, mode } = scriptData;
   const activeBreakdown = breakdowns[activeIndex];
   const isDeep = mode === "deep";
   const isFailed = (b) => b?.id?.toString().startsWith("failed-");
@@ -193,6 +207,29 @@ export default function ScriptOverview({
       {/* Per-scene action bar — hidden for failed scenes */}
       {!isFailed(activeBreakdown) && (
       <div className="max-w-5xl mx-auto px-4 sm:px-6 pt-3 pb-1">
+        {/* View mode tabs — prominent for booked role */}
+        <div className="flex items-center gap-1.5 mb-2" data-testid="scene-view-tabs">
+          {[
+            { id: "lines", label: "My Lines", icon: List, show: true },
+            { id: "fulltext", label: "Full Scene", icon: FileText, show: true },
+            { id: "breakdown", label: "Breakdown", icon: Sparkles, show: true },
+          ].filter(t => t.show).map(tab => (
+            <button
+              key={tab.id}
+              data-testid={`scene-view-${tab.id}`}
+              onClick={() => setSceneView(tab.id)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                sceneView === tab.id
+                  ? "bg-amber-500/10 text-amber-500 border border-amber-500/30"
+                  : "text-zinc-500 hover:text-zinc-300 border border-transparent hover:border-zinc-800"
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5" />
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
         <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1" data-testid="scene-action-bar">
           {/* Memorize — shown first for booked role */}
           {memorizeFirst && showMemorize && onOpenMemorization && activeBreakdown.memorization && (
@@ -283,14 +320,14 @@ export default function ScriptOverview({
       </div>
       )}
 
-      {/* Active breakdown or failed scene retry card */}
+      {/* Active scene content — view mode dependent */}
       <AnimatePresence mode="wait">
         <motion.div
-          key={activeBreakdown.id}
+          key={`${activeBreakdown.id}-${sceneView}`}
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
           exit={{ opacity: 0, x: -20 }}
-          transition={{ duration: 0.25 }}
+          transition={{ duration: 0.2 }}
         >
           {isFailed(activeBreakdown) ? (
             <div className="max-w-5xl mx-auto px-4 sm:px-6 py-8" data-testid="failed-scene-card">
@@ -343,21 +380,65 @@ export default function ScriptOverview({
                     </Button>
                   </div>
                 )}
-
-                {activeBreakdown.original_text && (
-                  <details className="text-left mt-4 cursor-pointer">
-                    <summary className="text-xs text-zinc-500 hover:text-zinc-400 transition-colors">
-                      Show scene text ({activeBreakdown.original_text.length} chars)
-                    </summary>
-                    <pre className="mt-2 text-xs text-zinc-600 whitespace-pre-wrap max-h-40 overflow-y-auto bg-zinc-900/50 rounded-lg p-3 border border-zinc-800">
-                      {activeBreakdown.original_text.slice(0, 2000)}
-                      {activeBreakdown.original_text.length > 2000 && "\n..."}
-                    </pre>
-                  </details>
-                )}
+              </div>
+            </div>
+          ) : sceneView === "lines" ? (
+            /* My Lines view — deterministic, zero GPT */
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6" data-testid="my-lines-view">
+              {activeBreakdown.memorization?.cue_recall?.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs text-zinc-500 uppercase tracking-wider">
+                      {activeBreakdown.memorization.cue_recall.length} line{activeBreakdown.memorization.cue_recall.length !== 1 ? "s" : ""} in this scene
+                    </p>
+                    <div className="flex gap-2">
+                      {showMemorize && onOpenMemorization && (
+                        <Button data-testid="lines-view-memorize" size="sm" onClick={() => onOpenMemorization?.(activeBreakdown)} className="bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs h-7 gap-1.5">
+                          <BookOpen className="w-3 h-3" /> Memorize
+                        </Button>
+                      )}
+                      {showRunLines && ttsAvailable && onOpenSceneReader && (
+                        <Button data-testid="lines-view-run-lines" size="sm" variant="outline" onClick={() => onOpenSceneReader?.(activeBreakdown)} className="border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 text-xs h-7 gap-1.5">
+                          <Mic className="w-3 h-3" /> Run Lines
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {activeBreakdown.memorization.cue_recall.map((cr, idx) => (
+                    <div key={idx} data-testid={`my-line-${idx}`} className="bg-zinc-950/40 border border-zinc-800/60 rounded-lg p-4">
+                      <p className="text-[11px] text-zinc-600 uppercase tracking-wider mb-1.5">Cue</p>
+                      <p className="text-sm text-zinc-500 mb-3 italic">{cr.cue}</p>
+                      <p className="text-[11px] text-amber-500/60 uppercase tracking-wider mb-1.5">Your line</p>
+                      <p className="text-sm text-zinc-200 leading-relaxed">{cr.your_line}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-12">
+                  <List className="w-8 h-8 text-zinc-700 mx-auto mb-3" />
+                  <p className="text-sm text-zinc-500">No lines found for this character in this scene.</p>
+                  <button onClick={() => setSceneView("fulltext")} className="text-xs text-amber-500 hover:underline mt-2">
+                    View full scene text to verify
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : sceneView === "fulltext" ? (
+            /* Full Scene Text view — raw text, zero GPT */
+            <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6" data-testid="full-scene-view">
+              <div className="bg-zinc-950/40 border border-zinc-800/60 rounded-lg p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <p className="text-xs text-zinc-500 uppercase tracking-wider">
+                    Scene text ({activeBreakdown.original_text?.length || 0} chars)
+                  </p>
+                </div>
+                <pre className="text-sm text-zinc-300 whitespace-pre-wrap leading-relaxed font-mono max-h-[60vh] overflow-y-auto">
+                  {activeBreakdown.original_text || "No scene text available."}
+                </pre>
               </div>
             </div>
           ) : (
+            /* Breakdown view — AI analysis */
             <BreakdownView
               breakdown={activeBreakdown}
               prepMode={prepMode}
