@@ -403,7 +403,7 @@ function MainApp() {
         )}
         {!loading && view === "upload" && (
           <motion.div key="upload" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-            <UploadPage onAnalyze={handleAnalyze} onFullScriptAnalyze={handleFullScriptAnalyze} recentBreakdowns={recentBreakdowns} recentScripts={recentScripts} onLoadBreakdown={handleLoadBreakdown} onLoadScript={handleLoadScript} />
+            <UploadPage onAnalyze={handleAnalyze} onFullScriptAnalyze={handleFullScriptAnalyze} recentBreakdowns={recentBreakdowns} recentScripts={recentScripts} onLoadBreakdown={handleLoadBreakdown} onLoadScript={handleLoadScript} loading={loading} />
           </motion.div>
         )}
         {!loading && view === "breakdown" && breakdown && (

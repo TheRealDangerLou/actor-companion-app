@@ -29,7 +29,7 @@ const stepAnim = {
   transition: { duration: 0.2 },
 };
 
-export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreakdowns, recentScripts, onLoadBreakdown, onLoadScript }) {
+export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreakdowns, recentScripts, onLoadBreakdown, onLoadScript, loading }) {
   const [step, setStep] = useState(1);
   const [inputType, setInputType] = useState(null); // "text" | "file" | "snap" | "fullscript"
   const [scriptText, setScriptText] = useState("");
@@ -73,7 +73,6 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   const [selectedScenes, setSelectedScenes] = useState(new Set());
   const [prepMode, setPrepMode] = useState(null); // "audition" | "booked" | "silent" | "study"
   const [projectType, setProjectType] = useState(null); // "commercial" | "tvfilm" | "theatre" | "voiceover"
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const fullScriptFileRef = useRef(null);
 
   const handleFileChange = useCallback((e) => {
@@ -229,8 +228,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   }, [parsedScenes, selectedScenes]);
 
   const handleFullScriptSubmit = useCallback(() => {
-    if (!parsedScenes || selectedScenes.size === 0 || isSubmitting) return;
-    setIsSubmitting(true);
+    if (!parsedScenes || selectedScenes.size === 0 || loading) return;
     const scenesToAnalyze = parsedScenes.scenes.filter(s => selectedScenes.has(s.scene_number));
     if (onFullScriptAnalyze) {
       onFullScriptAnalyze({
@@ -241,9 +239,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
         projectType,
       });
     }
-    // Reset after a short delay to allow navigation away
-    setTimeout(() => setIsSubmitting(false), 2000);
-  }, [parsedScenes, selectedScenes, characterName, mode, prepMode, projectType, onFullScriptAnalyze, isSubmitting]);
+  }, [parsedScenes, selectedScenes, characterName, mode, prepMode, projectType, onFullScriptAnalyze, loading]);
 
   const buildContextString = () => {
     const parts = [];
@@ -261,8 +257,7 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
   };
 
   const handleSubmit = () => {
-    if (isSubmitting) return;
-    setIsSubmitting(true);
+    if (loading) return;
     const contextStr = buildContextString();
     if (inputType === "text" && scriptText.trim().length >= 10) {
       const fullText = contextStr
@@ -272,8 +267,6 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
     } else if ((inputType === "file" || inputType === "snap") && imageFile) {
       onAnalyze({ type: "image", file: imageFile, context: contextStr, mode });
     }
-    // Reset after a short delay to allow navigation away
-    setTimeout(() => setIsSubmitting(false), 2000);
   };
 
   const canSubmit =
@@ -878,10 +871,10 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                     <Button
                       data-testid="analyze-button"
                       onClick={handleSubmit}
-                      disabled={!canSubmit || isSubmitting}
+                      disabled={!canSubmit || loading}
                       className="w-full mt-5 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
                     >
-                      {isSubmitting ? (
+                      {loading ? (
                         <>
                           <Loader2 className="w-4 h-4 animate-spin" />
                           Analyzing...
@@ -995,10 +988,10 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
                 <Button
                   data-testid="analyze-batch-button"
                   onClick={handleFullScriptSubmit}
-                  disabled={selectedScenes.size === 0 || isSubmitting}
+                  disabled={selectedScenes.size === 0 || loading}
                   className="w-full mt-4 h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold text-base rounded-lg btn-press disabled:opacity-30 disabled:cursor-not-allowed transition-colors gap-2"
                 >
-                  {isSubmitting ? (
+                  {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
                       Starting analysis...
