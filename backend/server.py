@@ -169,11 +169,25 @@ def extract_character_lines(text: str, character_name: str) -> dict:
         if is_character_name(stripped):
             speaker = extract_name(stripped)
             dialogue_lines = []
+            first_line = True
             i += 1
             while i < len(lines):
                 dl = lines[i].strip()
-                # Empty line = end of dialogue block
+                # Empty line: peek ahead to check for dialogue continuation
                 if not dl:
+                    peek = i + 1
+                    while peek < len(lines) and not lines[peek].strip():
+                        peek += 1
+                    if peek < len(lines):
+                        next_content = lines[peek].strip()
+                        # Stop if next content is a new speaker, heading, or action
+                        if is_character_name(next_content) or \
+                           re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
+                           is_action_line(next_content):
+                            break
+                        # Otherwise dialogue continues — skip blank line(s)
+                        i = peek
+                        continue
                     break
                 # Another character name = end of this speaker's dialogue
                 if is_character_name(dl):
@@ -181,8 +195,8 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                 # Scene heading
                 if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
                     break
-                # Action/description line = end of dialogue
-                if is_action_line(dl):
+                # Action/description line = end of dialogue (skip for first line — it's always dialogue)
+                if not first_line and is_action_line(dl):
                     break
                 # Skip parentheticals like (beat), (pause)
                 if re.match(r'^\(.*\)$', dl):
@@ -193,6 +207,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                     i += 1
                     continue
                 dialogue_lines.append(dl)
+                first_line = False
                 i += 1
             if dialogue_lines:
                 dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines), "line_idx": i})
@@ -217,15 +232,31 @@ def extract_character_lines(text: str, character_name: str) -> dict:
             # Check if we already have this block
             # Collect the dialogue
             fallback_lines = []
+            fb_first_line = True
             j = i + 1
             while j < len(lines):
                 dl = lines[j].strip()
-                if not dl or is_character_name(dl) or is_action_line(dl):
+                if not dl:
+                    # Peek ahead for dialogue continuation
+                    peek = j + 1
+                    while peek < len(lines) and not lines[peek].strip():
+                        peek += 1
+                    if peek < len(lines):
+                        next_content = lines[peek].strip()
+                        if is_character_name(next_content) or \
+                           re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
+                           is_action_line(next_content):
+                            break
+                        j = peek
+                        continue
+                    break
+                if is_character_name(dl) or (not fb_first_line and is_action_line(dl)):
                     break
                 if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
                     j += 1
                     continue
                 fallback_lines.append(dl)
+                fb_first_line = False
                 j += 1
             if fallback_lines:
                 fb_text = " ".join(fallback_lines)
