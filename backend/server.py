@@ -144,11 +144,20 @@ def extract_character_lines(text: str, character_name: str) -> dict:
         if re.match(r'^\d+\.\s*$', s):
             return True
         # Starts with lowercase and is long — likely action/description
+        # BUT exclude common dialogue continuation words
         if s[0].islower() and len(s) > 15:
-            return True
+            if not re.match(r'^(and |but |or |because |so |then |that |just |like |maybe |if |when |where |what |who |how |why |not |no |yes |the |this |it |to |for |in |on |at |my |your |his |her |our |you )', s, re.IGNORECASE):
+                return True
         # Starts with a proper-case name followed by action verb or adverb+verb
-        # e.g., "Ivy grabs...", "Felix enters.", "Ivy instantly lets go"
-        if re.match(r'^[A-Z][a-z]+\s+(?:\w+ly\s+)?(?:enters|exits|turns|walks|grabs|runs|looks|sits|stands|goes|opens|closes|picks|pushes|shakes|approaches|whispers|freezes|shrugs|smiles|answers|laughs|cries|screams|sighs|nods|pauses|points|lets|gets|takes|puts|pulls|drops|falls|stares|stops|starts|moves|leaves|steps|reaches|holds|throws|slaps|kisses|hugs)', s):
+        # e.g., "Ivy grabs...", "Felix enters.", "Ivy slowly begins to crawl"
+        # Only match known character-name patterns (2+ letters, not common words)
+        if re.match(r"^[A-Z][a-z]{2,}(?:'s)?\s+(?:\w+ly\s+)?(?:is|was|has|had|are|were|isn't|wasn't|can't|doesn't|didn't|enters|exits|turns|walks|grabs|runs|looks|sits|stands|goes|opens|closes|picks|pushes|shakes|approaches|whispers|freezes|shrugs|smiles|answers|laughs|cries|screams|sighs|nods|pauses|points|lets|let's|gets|takes|puts|pulls|drops|falls|stares|stops|starts|moves|leaves|steps|reaches|holds|throws|slaps|kisses|hugs|begins|crawls|climbs|covers|watches|groans|moans|gasps|snaps|winks|blinks|frowns|glares|leans|bends|kneels|lies|rolls|wraps|rubs|squeezes|pins|presses|lifts|raises|speaks|slowly|instantly|quietly|gently|quickly|suddenly)", s):
+            # Exclude common dialogue starters that look like Name+verb
+            first_word = s.split()[0] if s.split() else ""
+            if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'well', 'sure', 'fine', 'come', 'look', 'listen', 'stop', 'wait', 'maybe', 'never', 'always', 'enough', 'please'):
+                return True
+        # "We see...", "We hear...", "Close-up on...", "They..." — common action starts
+        if re.match(r'^(We |They |Close-up |The camera |His |Her |Their )', s):
             return True
         return False
 
