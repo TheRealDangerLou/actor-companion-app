@@ -43,6 +43,13 @@ Build a clean, fast web app called "Actor's Companion" where actors upload audit
 - **Episode Parser**: Scene splitter now recognizes `EPISODE X`, `EP X`, `EP. X`, `CHAPTER X`, and `#X` markers (Tier 3, after INT/EXT and SCENE/ACT)
 - **Genre Direction Injection**: When project_type is "vertical", GPT receives specific genre context: heightened acting, faster turns, stronger reversals, camera-conscious physicality, tight memorization chunks
 
+### Script Persistence & Performance (Feb 2026)
+- **My Scripts List**: `GET /api/scripts` returns recent scripts with metadata (character_name, mode, breakdown_count, prep_mode, project_type). Shown on landing page as "My Scripts" section
+- **Script Loading**: Clicking a script loads all breakdowns via `GET /api/scripts/{id}` — zero GPT calls, instant access to rehearsal tools
+- **Prep/Type Storage**: `POST /api/scripts/create` now stores prep_mode and project_type, enabling full context restore on reload
+- **Parallel Batching**: Full script analysis processes scenes in batches of 3 (BATCH_SIZE=3) via Promise.all, reducing ~10 min to ~3 min for 26 scenes
+- **Zero-Credit Rehearsal**: MemorizationMode has zero network calls (pure client-side). SceneReader only calls TTS endpoint. No GPT calls during My Lines, Memorize, Run Lines, or scene navigation
+
 ### Analysis Engine v3 (Behavioral, Text-Grounded)
 - Observable-first principle: everything anchored in provable text
 - Behavior + Effect per beat (replaces emotion labels)
