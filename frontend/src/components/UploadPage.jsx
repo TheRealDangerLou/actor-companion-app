@@ -241,6 +241,8 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
         projectType,
       });
     }
+    // Reset after a short delay to allow navigation away
+    setTimeout(() => setIsSubmitting(false), 2000);
   }, [parsedScenes, selectedScenes, characterName, mode, prepMode, projectType, onFullScriptAnalyze, isSubmitting]);
 
   const buildContextString = () => {
@@ -270,6 +272,8 @@ export default function UploadPage({ onAnalyze, onFullScriptAnalyze, recentBreak
     } else if ((inputType === "file" || inputType === "snap") && imageFile) {
       onAnalyze({ type: "image", file: imageFile, context: contextStr, mode });
     }
+    // Reset after a short delay to allow navigation away
+    setTimeout(() => setIsSubmitting(false), 2000);
   };
 
   const canSubmit =
