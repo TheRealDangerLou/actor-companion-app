@@ -43,6 +43,10 @@ export default function MemorizationMode({ memorization, characterName, onClose 
   const [myLineCueShown, setMyLineCueShown] = useState(false);
   const myLineTouchRef = useRef(null);
 
+  // Progressive blur / memorization ladder
+  const [blurLevel, setBlurLevel] = useState(0);
+  const [myLinesComplete, setMyLinesComplete] = useState(false);
+
   useWakeLock();
 
   if (!memorization) return null;
@@ -52,6 +56,10 @@ export default function MemorizationMode({ memorization, characterName, onClose 
   const nailed = Object.values(results).filter(v => v === "nailed").length;
   const peeked = Object.values(results).filter(v => v === "peeked").length;
   const runComplete = Object.keys(results).length === totalCues && totalCues > 0;
+
+  // Blur ladder config
+  const blurIntensity = ['blur-0', 'blur-[3px]', 'blur-[8px]', 'blur-[20px]'];
+  const passLabels = ['Full Text', 'Light Blur', 'Heavy Blur', 'Off-Book'];
 
   // --- Navigation ---
   const goNext = () => {
@@ -195,20 +203,70 @@ export default function MemorizationMode({ memorization, characterName, onClose 
               <div className="flex-1 flex items-center justify-center">
                 <p className="text-sm text-zinc-500 text-center">No lines available for this breakdown.</p>
               </div>
+            ) : myLinesComplete ? (
+              /* Pass complete prompt */
+              <motion.div
+                initial={{ opacity: 0, scale: 0.95 }}
+                animate={{ opacity: 1, scale: 1 }}
+                className="flex-1 flex flex-col items-center justify-center text-center"
+                data-testid="my-lines-complete"
+              >
+                <div className="w-16 h-16 rounded-full bg-amber-500/10 border border-amber-500/30 flex items-center justify-center mb-6">
+                  <Check className="w-8 h-8 text-amber-500" />
+                </div>
+                <h3 className="font-display text-xl font-bold text-white mb-2">Pass Complete</h3>
+                <p className="text-sm text-zinc-400 mb-1">{passLabels[blurLevel]}</p>
+                <p className="text-xs text-zinc-600 mb-8">{totalCues} line{totalCues !== 1 ? "s" : ""}</p>
+                <div className="flex flex-col gap-3 w-full max-w-xs">
+                  <Button
+                    data-testid="my-lines-repeat"
+                    onClick={() => { setMyLinesComplete(false); setMyLineIndex(0); setMyLineCueShown(false); }}
+                    variant="outline"
+                    className="h-12 border-zinc-700 text-zinc-300 hover:text-white font-bold gap-2"
+                  >
+                    <RotateCcw className="w-4 h-4" />
+                    Repeat
+                  </Button>
+                  {blurLevel < 3 && (
+                    <Button
+                      data-testid="my-lines-harder"
+                      onClick={() => { setBlurLevel(l => l + 1); setMyLinesComplete(false); setMyLineIndex(0); setMyLineCueShown(false); }}
+                      className="h-12 bg-amber-500 hover:bg-amber-600 text-black font-bold gap-2"
+                    >
+                      <ChevronRight className="w-4 h-4" />
+                      {passLabels[blurLevel + 1]}
+                    </Button>
+                  )}
+                  <Button
+                    data-testid="my-lines-done"
+                    onClick={onClose}
+                    variant="ghost"
+                    className="h-12 text-zinc-500 hover:text-zinc-300"
+                  >
+                    Done
+                  </Button>
+                </div>
+              </motion.div>
             ) : (
+              /* Active line drill */
               <div
                 className="flex-1 flex flex-col justify-center select-none"
                 onClick={() => {
-                  // Tap anywhere to advance
                   if (myLineIndex < totalCues - 1) {
                     setMyLineIndex(i => i + 1);
                     setMyLineCueShown(false);
                   } else {
-                    setMyLineIndex(0);
-                    setMyLineCueShown(false);
+                    setMyLinesComplete(true);
                   }
                 }}
               >
+                {/* Blur level indicator */}
+                {blurLevel > 0 && (
+                  <div className="flex items-center justify-center mb-3 pointer-events-none">
+                    <span className="text-[10px] text-amber-500/70 uppercase tracking-widest font-medium" data-testid="blur-level-label">{passLabels[blurLevel]}</span>
+                  </div>
+                )}
+
                 {/* Progress bar */}
                 <div className="flex items-center gap-2 mb-8 pointer-events-none">
                   <span className="text-xs text-zinc-600 tabular-nums">{myLineIndex + 1}/{totalCues}</span>
@@ -221,17 +279,17 @@ export default function MemorizationMode({ memorization, characterName, onClose 
                 </div>
 
                 {/* The line */}
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                   <motion.div
                     key={myLineIndex}
                     initial={{ opacity: 0, y: 16 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -16 }}
-                    transition={{ duration: 0.15 }}
+                    transition={{ duration: 0.12 }}
                     className="flex-1 flex flex-col justify-center"
                   >
                     <p
-                      className="text-2xl sm:text-3xl text-zinc-100 font-script leading-relaxed text-center"
+                      className={`text-2xl sm:text-3xl text-zinc-100 font-script leading-relaxed text-center transition-[filter] duration-300 ${blurIntensity[blurLevel]}`}
                       data-testid="my-line-text"
                     >
                       {cue_recall[myLineIndex]?.your_line}
@@ -261,7 +319,7 @@ export default function MemorizationMode({ memorization, characterName, onClose 
 
                 {/* Hint */}
                 <p className="text-[10px] text-zinc-800 text-center mt-8 pointer-events-none">
-                  {myLineIndex < totalCues - 1 ? "tap anywhere for next line" : "tap to restart"}
+                  tap anywhere for next line
                 </p>
               </div>
             )}
@@ -304,6 +362,14 @@ export default function MemorizationMode({ memorization, characterName, onClose 
                   <RotateCcw className="w-4 h-4" />
                   Run Again
                 </Button>
+                <Button
+                  data-testid="run-done-button"
+                  onClick={onClose}
+                  variant="ghost"
+                  className="text-zinc-500 hover:text-zinc-300 mt-2"
+                >
+                  Done
+                </Button>
               </motion.div>
             ) : (
               /* Active drill */
@@ -321,13 +387,13 @@ export default function MemorizationMode({ memorization, characterName, onClose 
                 </div>
 
                 {/* Cue */}
-                <AnimatePresence mode="wait">
+                <AnimatePresence>
                   <motion.div
                     key={runIndex}
                     initial={{ opacity: 0, y: 12 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -12 }}
-                    transition={{ duration: 0.2 }}
+                    transition={{ duration: 0.12 }}
                     className="flex-1 flex flex-col justify-center"
                   >
                     <p className="text-xs uppercase tracking-widest text-zinc-600 mb-2">They say:</p>
