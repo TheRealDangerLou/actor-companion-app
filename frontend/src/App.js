@@ -12,6 +12,7 @@ import SceneReader from "@/components/SceneReader";
 import ScriptOverview from "@/components/ScriptOverview";
 import LoadingScreen from "@/components/LoadingScreen";
 import AdjustmentPanel from "@/components/AdjustmentPanel";
+import ParseAudit from "@/components/ParseAudit";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -561,6 +562,7 @@ function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/share/:id" element={<SharePage />} />
+            <Route path="/debug" element={<ParseAudit />} />
             <Route path="*" element={<MainApp />} />
           </Routes>
         </BrowserRouter>

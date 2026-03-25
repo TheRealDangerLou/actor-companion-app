@@ -1833,6 +1833,96 @@ async def parse_lines(request: ParseLinesRequest):
     }
 
 
+@api_router.post("/debug/parse-audit")
+async def parse_audit(request: ParseLinesRequest):
+    """Audit tool: shows raw text annotated with what the parser captured vs missed.
+    Zero GPT. For validation only."""
+    text = request.text
+    character_name = request.character_name
+    char_upper = character_name.strip().upper()
+
+    # Get parser output
+    result = extract_character_lines(text, character_name)
+    cue_recall = result.get("cue_recall", [])
+    extracted_lines = [cr["your_line"] for cr in cue_recall]
+
+    # Build line-by-line annotation of the raw text
+    lines = text.split("\n")
+    annotations = []
+    extracted_set = set(extracted_lines)
+
+    # Also build a flat list of all dialogue blocks (all speakers) for context
+    all_blocks = []
+    # Re-parse to get all speakers' blocks
+    import re as _re
+    def _is_char(s):
+        s = s.strip()
+        if not s or len(s) > 60 or len(s) < 2:
+            return False
+        m = _re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
+        if not m:
+            return False
+        name = m.group(1).strip()
+        if _re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|END OF|THE END)', name):
+            return False
+        return True
+
+    def _extract_name(s):
+        m = _re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s.strip())
+        return m.group(1).strip() if m else s.strip()
+
+    # Annotate each line
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        stripped = raw.strip()
+
+        if _is_char(stripped):
+            speaker = _extract_name(stripped)
+            is_target = speaker.upper() == char_upper or char_upper in speaker.upper()
+            annotations.append({
+                "line_num": i + 1,
+                "raw": raw,
+                "type": "speaker",
+                "speaker": speaker,
+                "is_target_character": is_target,
+            })
+        elif stripped == "":
+            annotations.append({"line_num": i + 1, "raw": raw, "type": "blank"})
+        elif _re.match(r'^(INT\.|EXT\.|INT/EXT\.)', stripped, _re.IGNORECASE):
+            annotations.append({"line_num": i + 1, "raw": raw, "type": "heading"})
+        elif _re.match(r'^\(.*\)$', stripped):
+            annotations.append({"line_num": i + 1, "raw": raw, "type": "parenthetical"})
+        else:
+            # Check if this text appears in any extracted line
+            found_in = None
+            for idx, el in enumerate(extracted_lines):
+                if stripped in el:
+                    found_in = idx
+                    break
+            annotations.append({
+                "line_num": i + 1,
+                "raw": raw,
+                "type": "captured" if found_in is not None else "uncaptured",
+                "matched_line_index": found_in,
+            })
+        i += 1
+
+    # Build mismatch summary
+    uncaptured = [a for a in annotations if a["type"] == "uncaptured"]
+
+    return {
+        "character_name": character_name,
+        "total_raw_lines": len(lines),
+        "extracted_line_count": len(extracted_lines),
+        "extracted_lines": extracted_lines,
+        "uncaptured_count": len(uncaptured),
+        "uncaptured_lines": [{"line_num": u["line_num"], "text": u["raw"].strip()} for u in uncaptured],
+        "annotations": annotations,
+    }
+
+
+
 # Curated default voices — available with any ElevenLabs API key
 DEFAULT_VOICES = [
     {"voice_id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel", "gender": "female", "accent": "American", "style": "Calm, natural"},
