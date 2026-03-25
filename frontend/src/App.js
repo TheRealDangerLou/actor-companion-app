@@ -179,7 +179,7 @@ function MainApp() {
       const { script_id } = createResp.data;
 
       // Step 2: Analyze scenes in parallel batches (3 at a time for speed)
-      const BATCH_SIZE = 3;
+      const BATCH_SIZE = 2;
       const breakdowns = new Array(scenes.length).fill(null);
       let stopBatch = false;
 
@@ -223,6 +223,9 @@ function MainApp() {
             } else if (status === 503) {
               errorType = "service_unavailable";
               errorMsg = detail || "LLM service temporarily unavailable";
+            } else if (status === 502) {
+              errorType = "proxy_timeout";
+              errorMsg = "Proxy timeout — scene took too long. Retry individually.";
             } else if (status === 504) {
               errorType = "timeout";
               errorMsg = detail || "Scene timed out";
