@@ -136,7 +136,8 @@ def extract_character_lines(text: str, character_name: str) -> dict:
         return m.group(1).strip() if m else s.strip()
 
     def is_action_line(s):
-        """Detect action/description lines that should stop dialogue collection."""
+        """Detect action/description lines that should stop dialogue collection.
+        Used for inline detection (no blank line between dialogue and action)."""
         s = s.strip()
         if not s:
             return True
@@ -161,6 +162,26 @@ def extract_character_lines(text: str, character_name: str) -> dict:
             return True
         return False
 
+    def is_action_line_strict(s):
+        """Stricter action detection for peek-ahead after blank lines.
+        Only flags lines that are unambiguously stage direction.
+        Dialogue continuations often start with He/She/They/We/lowercase — don't flag those."""
+        s = s.strip()
+        if not s:
+            return True
+        if re.match(r'^\d+\.\s*$', s):
+            return True
+        # Only flag: ProperName + physical action verb (no pronouns, no common words)
+        # Must be a 2+ word proper name pattern followed directly by a physical verb
+        if re.match(r"^[A-Z][a-z]{2,}(?:'s)?\s+(?:\w+ly\s+)?(?:enters|exits|turns|walks|grabs|runs|sits|stands|goes|opens|closes|picks|pushes|shakes|approaches|whispers|freezes|shrugs|smiles|laughs|cries|screams|sighs|nods|pauses|points|gets|takes|puts|pulls|drops|falls|stares|stops|starts|moves|leaves|steps|reaches|holds|throws|slaps|kisses|hugs|begins|crawls|climbs|covers|watches|groans|moans|gasps|snaps|winks|blinks|frowns|glares|leans|bends|kneels|lies|rolls|wraps|rubs|squeezes|pins|presses|lifts|raises|slowly|instantly|quietly|gently|quickly|suddenly)", s):
+            first_word = s.split()[0] if s.split() else ""
+            if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'well', 'sure', 'fine', 'come', 'look', 'listen', 'stop', 'wait', 'maybe', 'never', 'always', 'enough', 'please', 'she', 'he', 'we', 'they', 'his', 'her', 'their', 'its', 'my', 'your', 'our', 'nothing', 'everything', 'everyone', 'someone', 'no', 'not'):
+                return True
+        # "Close-up on...", "The camera..." — unambiguous stage direction
+        if re.match(r'^(Close-up |The camera )', s):
+            return True
+        return False
+
     # --- Primary pass: extract dialogue blocks ---
     dialogue_blocks = []
     i = 0
@@ -170,6 +191,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
             speaker = extract_name(stripped)
             dialogue_lines = []
             first_line = True
+            after_blank_skip = False
             i += 1
             while i < len(lines):
                 dl = lines[i].strip()
@@ -180,13 +202,15 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                         peek += 1
                     if peek < len(lines):
                         next_content = lines[peek].strip()
-                        # Stop if next content is a new speaker, heading, or action
+                        # Stop if next content is a new speaker, heading, or unambiguous action
                         if is_character_name(next_content) or \
                            re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
-                           is_action_line(next_content):
+                           is_action_line_strict(next_content):
                             break
                         # Otherwise dialogue continues — skip blank line(s)
+                        # Mark that next line was reached via blank-line skip (treat as continuation)
                         i = peek
+                        after_blank_skip = True
                         continue
                     break
                 # Another character name = end of this speaker's dialogue
@@ -195,8 +219,9 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                 # Scene heading
                 if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
                     break
-                # Action/description line = end of dialogue (skip for first line — it's always dialogue)
-                if not first_line and is_action_line(dl):
+                # Action/description line = end of dialogue
+                # Skip for first line (always dialogue) and lines reached via blank-line continuation
+                if not first_line and not after_blank_skip and is_action_line(dl):
                     break
                 # Skip parentheticals like (beat), (pause)
                 if re.match(r'^\(.*\)$', dl):
@@ -208,6 +233,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                     continue
                 dialogue_lines.append(dl)
                 first_line = False
+                after_blank_skip = False
                 i += 1
             if dialogue_lines:
                 dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines), "line_idx": i})
@@ -233,6 +259,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
             # Collect the dialogue
             fallback_lines = []
             fb_first_line = True
+            fb_after_blank = False
             j = i + 1
             while j < len(lines):
                 dl = lines[j].strip()
@@ -245,18 +272,20 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                         next_content = lines[peek].strip()
                         if is_character_name(next_content) or \
                            re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
-                           is_action_line(next_content):
+                           is_action_line_strict(next_content):
                             break
                         j = peek
+                        fb_after_blank = True
                         continue
                     break
-                if is_character_name(dl) or (not fb_first_line and is_action_line(dl)):
+                if is_character_name(dl) or (not fb_first_line and not fb_after_blank and is_action_line(dl)):
                     break
                 if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
                     j += 1
                     continue
                 fallback_lines.append(dl)
                 fb_first_line = False
+                fb_after_blank = False
                 j += 1
             if fallback_lines:
                 fb_text = " ".join(fallback_lines)
