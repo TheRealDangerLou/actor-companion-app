@@ -208,7 +208,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                         next_content = lines[peek].strip()
                         # Stop if next content is a new speaker, heading, or unambiguous action
                         if is_character_name(next_content) or \
-                           re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
+                           re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
                            is_action_line_strict(next_content):
                             break
                         # Otherwise dialogue continues — skip blank line(s)
@@ -221,21 +221,26 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                 if is_character_name(dl):
                     break
                 # Scene heading
-                if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
-                    break
-                # Action/description line = end of dialogue
-                # Skip for first line (always dialogue) and lines reached via blank-line continuation
-                if not first_line and not after_blank_skip and is_action_line(dl):
+                if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
                     break
                 # Skip parentheticals like (beat), (pause)
                 if re.match(r'^\(.*\)$', dl):
                     i += 1
                     after_blank_skip = True  # protect next line from action check (same as blank-line continuation)
                     continue
-                # Page number embedded in line
+                # Page number embedded in line — skip before action check
                 if re.match(r'^\d+\.\s*$', dl):
                     i += 1
                     continue
+                # Action/description line = end of dialogue
+                # Skip for first line (always dialogue) and lines reached via blank-line continuation
+                # Also skip if previous dialogue line didn't end with sentence terminator (mid-sentence wrap)
+                prev_ended_sentence = True
+                if dialogue_lines:
+                    prev_last_char = dialogue_lines[-1].rstrip()[-1:] if dialogue_lines[-1].rstrip() else ''
+                    prev_ended_sentence = prev_last_char in '.!?"\u201d'
+                if not first_line and not after_blank_skip and prev_ended_sentence and is_action_line(dl):
+                    break
                 dialogue_lines.append(dl)
                 first_line = False
                 after_blank_skip = False
@@ -276,19 +281,26 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                     if peek < len(lines):
                         next_content = lines[peek].strip()
                         if is_character_name(next_content) or \
-                           re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
+                           re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
                            is_action_line_strict(next_content):
                             break
                         j = peek
                         fb_after_blank = True
                         continue
                     break
-                if is_character_name(dl) or (not fb_first_line and not fb_after_blank and is_action_line(dl)):
+                if is_character_name(dl) or \
+                   re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
                     break
                 if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
                     j += 1
                     fb_after_blank = True  # protect next line from action check
                     continue
+                fb_prev_ended = True
+                if fallback_lines:
+                    fb_prev_last = fallback_lines[-1].rstrip()[-1:] if fallback_lines[-1].rstrip() else ''
+                    fb_prev_ended = fb_prev_last in '.!?"\u201d'
+                if not fb_first_line and not fb_after_blank and fb_prev_ended and is_action_line(dl):
+                    break
                 fallback_lines.append(dl)
                 fb_first_line = False
                 fb_after_blank = False
@@ -317,8 +329,18 @@ def extract_character_lines(text: str, character_name: str) -> dict:
     cue_recall = []
     for idx, block in enumerate(dialogue_blocks):
         if block["speaker"].upper() == char_upper or char_upper in block["speaker"].upper():
-            cue = "(Scene start)" if idx == 0 else f'{dialogue_blocks[idx - 1]["speaker"]}: {dialogue_blocks[idx - 1]["text"]}'
-            cue_recall.append({"cue": cue, "your_line": block["text"]})
+            if idx == 0:
+                cue = "(Scene start)"
+                cue_speaker = ""
+            else:
+                prev = dialogue_blocks[idx - 1]
+                cue = f'{prev["speaker"]}: {prev["text"]}'
+                cue_speaker = prev["speaker"].upper()
+            cue_recall.append({
+                "cue": cue,
+                "your_line": block["text"],
+                "cue_speaker": cue_speaker,
+            })
 
     # Build chunked_lines
     char_lines = [b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or char_upper in b["speaker"].upper()]
@@ -1653,10 +1675,15 @@ async def get_script(script_id: str):
         raise HTTPException(status_code=404, detail="Script not found")
 
     breakdown_ids = script.get("breakdown_ids", [])
+    character_name = script.get("character_name", "")
     breakdowns = []
     for bid in breakdown_ids:
         b = await db.breakdowns.find_one({"id": bid}, {"_id": 0})
         if b:
+            # Re-parse memorization with current parser to fix stale data
+            if character_name and b.get("original_text"):
+                fresh_mem = extract_character_lines(b["original_text"], character_name)
+                b["memorization"] = fresh_mem
             breakdowns.append(b)
 
     return {
@@ -1895,7 +1922,7 @@ async def parse_audit(request: ParseLinesRequest):
             })
         elif stripped == "":
             annotations.append({"line_num": i + 1, "raw": raw, "type": "blank"})
-        elif _re.match(r'^(INT\.|EXT\.|INT/EXT\.)', stripped, _re.IGNORECASE):
+        elif _re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.)', stripped, _re.IGNORECASE):
             annotations.append({"line_num": i + 1, "raw": raw, "type": "heading"})
         elif _re.match(r'^\(.*\)$', stripped):
             annotations.append({"line_num": i + 1, "raw": raw, "type": "parenthetical"})

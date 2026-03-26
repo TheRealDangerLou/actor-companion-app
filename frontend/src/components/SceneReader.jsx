@@ -161,16 +161,20 @@ export default function SceneReader({
       setCurrentCue(i);
       setShowYourLine(false);
 
-      // Play the cue line (other character) via TTS
-      if (ttsAvailable) {
-        const audioPlayed = await playCueAudio(cues[i].cue);
-        // If audio failed/was blocked, give a short pause to read the text cue
+      const cueText = cues[i].cue;
+      const cueSpeaker = (cues[i].cue_speaker || "").toUpperCase();
+      const isSelfCue = cueSpeaker && characterName && cueSpeaker === characterName.toUpperCase();
+      const isSceneStart = cueText === "(Scene start)";
+
+      // Play the cue line (other character) via TTS — skip for scene start and self-cues
+      if (ttsAvailable && !isSceneStart && !isSelfCue) {
+        const audioPlayed = await playCueAudio(cueText);
         if (!audioPlayed && !abortRef.current) {
           await new Promise(r => { timeoutRef.current = setTimeout(r, 2000); });
         }
       } else {
-        // No TTS — show cue text for a moment
-        await new Promise(r => { timeoutRef.current = setTimeout(r, 2500); });
+        // Short pause for scene start / self-cue / no TTS
+        await new Promise(r => { timeoutRef.current = setTimeout(r, isSceneStart ? 500 : 1500); });
       }
 
       if (abortRef.current) break;
@@ -224,11 +228,15 @@ export default function SceneReader({
 
   const playSingleCue = useCallback(async (index) => {
     if (!ttsAvailable) return;
+    const cueText = cues[index].cue;
+    const cueSpeaker = (cues[index].cue_speaker || "").toUpperCase();
+    const isSelfCue = cueSpeaker && characterName && cueSpeaker === characterName.toUpperCase();
+    if (cueText === "(Scene start)" || isSelfCue) return;
     setCurrentCue(index);
     setShowYourLine(false);
-    await playCueAudio(cues[index].cue);
+    await playCueAudio(cueText);
     setShowYourLine(true);
-  }, [ttsAvailable, cues, playCueAudio]);
+  }, [ttsAvailable, cues, playCueAudio, characterName]);
 
   return (
     <motion.div
@@ -447,9 +455,15 @@ export default function SceneReader({
                 {/* Cue Line (other character) */}
                 <div className="px-4 py-3 border-b border-zinc-800/30 flex items-start gap-3">
                   <div className="flex-1">
-                    <p className="text-xs uppercase tracking-wider text-zinc-600 mb-1">Cue</p>
-                    <p className={`text-sm sm:text-base font-script ${isActive ? 'text-zinc-200' : 'text-zinc-400'}`}>
-                      {item.cue}
+                    <p className="text-xs uppercase tracking-wider text-zinc-600 mb-1">
+                      {item.cue === "(Scene start)" ? "Scene Start" : 
+                       item.cue_speaker && characterName && item.cue_speaker.toUpperCase() === characterName.toUpperCase() 
+                         ? "Your Previous Line" : "Cue"}
+                    </p>
+                    <p className={`text-sm sm:text-base font-script ${isActive ? 'text-zinc-200' : 'text-zinc-400'} ${
+                      item.cue === "(Scene start)" ? 'italic text-zinc-600' : ''
+                    }`}>
+                      {item.cue === "(Scene start)" ? "You speak first." : item.cue}
                     </p>
                   </div>
                   {ttsAvailable && !isPlaying && (
