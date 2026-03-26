@@ -1732,7 +1732,7 @@ async def analyze_single_scene(request: SingleSceneRequest):
 
     logger.info(f"[COST] Scene #{request.scene_number} CACHE MISS — GPT call (est. ${estimate_cost(mode):.2f})")
     try:
-        gpt_timeout = 45  # Stay well under proxy timeout (~60s)
+        gpt_timeout = 120 if mode == "deep" else 90
         result, raw = await asyncio.wait_for(
             analyze_with_gpt(text=analysis_text, mode=mode),
             timeout=gpt_timeout
