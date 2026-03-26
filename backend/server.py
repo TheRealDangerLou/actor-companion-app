@@ -177,6 +177,10 @@ def extract_character_lines(text: str, character_name: str) -> dict:
             first_word = s.split()[0] if s.split() else ""
             if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'well', 'sure', 'fine', 'come', 'look', 'listen', 'stop', 'wait', 'maybe', 'never', 'always', 'enough', 'please', 'she', 'he', 'we', 'they', 'his', 'her', 'their', 'its', 'my', 'your', 'our', 'nothing', 'everything', 'everyone', 'someone', 'no', 'not'):
                 return True
+        # Narration pattern: His/Her/Their + 1-3 words + past-tense verb (clearly describing events, not dialogue)
+        # e.g. "His whole world changed", "Her heart sank", "Their eyes met"
+        if re.match(r'^(His|Her|Their|The)\s+(?:\w+\s+){0,3}\w*(ed|ank|oke|ell|ew|ung|ept|elt|ose|one|ent|ade|ook|ame)\b', s):
+            return True
         # "Close-up on...", "The camera..." — unambiguous stage direction
         if re.match(r'^(Close-up |The camera )', s):
             return True
@@ -226,6 +230,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                 # Skip parentheticals like (beat), (pause)
                 if re.match(r'^\(.*\)$', dl):
                     i += 1
+                    after_blank_skip = True  # protect next line from action check (same as blank-line continuation)
                     continue
                 # Page number embedded in line
                 if re.match(r'^\d+\.\s*$', dl):
@@ -282,6 +287,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                     break
                 if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
                     j += 1
+                    fb_after_blank = True  # protect next line from action check
                     continue
                 fallback_lines.append(dl)
                 fb_first_line = False
