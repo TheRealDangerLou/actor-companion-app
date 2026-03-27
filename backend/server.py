@@ -128,6 +128,10 @@ def extract_character_lines(text: str, character_name: str) -> dict:
         # Reject scene headings, transitions, page numbers
         if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|END OF|THE END)', name):
             return False
+        # Reject single-letter "names" like "I..." or "A."
+        alpha_only = re.sub(r'[\s\.\'\-]', '', name)
+        if len(alpha_only) < 2:
+            return False
         return True
 
     def extract_name(s):
@@ -206,19 +210,30 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                         peek += 1
                     if peek < len(lines):
                         next_content = lines[peek].strip()
-                        # Stop if next content is a new speaker, heading, or unambiguous action
-                        if is_character_name(next_content) or \
-                           re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
+                        # Same speaker with CONT'D after blank = page-break continuation (MORE/CONT'D)
+                        if is_character_name(next_content):
+                            nc_name = extract_name(next_content).upper()
+                            if nc_name == speaker.upper() and re.search(r"CONT'?D", next_content, re.IGNORECASE):
+                                i = peek + 1
+                                after_blank_skip = True
+                                continue
+                            break
+                        # Stop if heading or unambiguous action
+                        if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
                            is_action_line_strict(next_content):
                             break
                         # Otherwise dialogue continues — skip blank line(s)
-                        # Mark that next line was reached via blank-line skip (treat as continuation)
                         i = peek
                         after_blank_skip = True
                         continue
                     break
                 # Another character name = end of this speaker's dialogue
+                # UNLESS it's the same speaker with (CONT'D) — that's a page-break continuation
                 if is_character_name(dl):
+                    other_name = extract_name(dl).upper()
+                    if other_name == speaker.upper() and re.search(r"CONT'?D", dl, re.IGNORECASE):
+                        i += 1
+                        continue
                     break
                 # Scene heading
                 if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
@@ -229,8 +244,10 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                     after_blank_skip = True  # protect next line from action check (same as blank-line continuation)
                     continue
                 # Page number embedded in line — skip before action check
+                # Treat as structural boundary (like blank line)
                 if re.match(r'^\d+\.\s*$', dl):
                     i += 1
+                    after_blank_skip = True
                     continue
                 # Action/description line = end of dialogue
                 # Skip for first line (always dialogue) and lines reached via blank-line continuation
@@ -265,6 +282,7 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                 matched = True
                 break
         if matched:
+            fb_speaker = extract_name(lines[i].strip()).upper()
             # Check if we already have this block
             # Collect the dialogue
             fallback_lines = []
@@ -280,16 +298,28 @@ def extract_character_lines(text: str, character_name: str) -> dict:
                         peek += 1
                     if peek < len(lines):
                         next_content = lines[peek].strip()
-                        if is_character_name(next_content) or \
-                           re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
+                        # Same speaker with CONT'D = page-break continuation
+                        if is_character_name(next_content):
+                            nc_name = extract_name(next_content).upper()
+                            if nc_name == fb_speaker and re.search(r"CONT'?D", next_content, re.IGNORECASE):
+                                j = peek + 1
+                                fb_after_blank = True
+                                continue
+                            break
+                        if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', next_content, re.IGNORECASE) or \
                            is_action_line_strict(next_content):
                             break
                         j = peek
                         fb_after_blank = True
                         continue
                     break
-                if is_character_name(dl) or \
-                   re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
+                if is_character_name(dl):
+                    other_fb_name = extract_name(dl).upper()
+                    if other_fb_name == fb_speaker and re.search(r"CONT'?D", dl, re.IGNORECASE):
+                        j += 1
+                        continue
+                    break
+                if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, re.IGNORECASE):
                     break
                 if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
                     j += 1
