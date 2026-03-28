@@ -1716,6 +1716,8 @@ async def get_script(script_id: str):
                 b["memorization"] = fresh_mem
             breakdowns.append(b)
 
+    breakdowns.sort(key=lambda x: x.get("scene_number", 0))
+
     return {
         **script,
         "breakdowns": breakdowns,
