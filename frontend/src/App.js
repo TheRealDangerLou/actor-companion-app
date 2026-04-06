@@ -10,6 +10,7 @@ import BreakdownView from "@/components/BreakdownView";
 import MemorizationMode from "@/components/MemorizationMode";
 import SceneReader from "@/components/SceneReader";
 import ScriptOverview from "@/components/ScriptOverview";
+import ScriptReview from "@/components/ScriptReview";
 import LoadingScreen from "@/components/LoadingScreen";
 import AdjustmentPanel from "@/components/AdjustmentPanel";
 import ParseAudit from "@/components/ParseAudit";
@@ -17,7 +18,7 @@ import ParseAudit from "@/components/ParseAudit";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function MainApp() {
-  const [view, setView] = useState("upload"); // "upload" | "breakdown" | "script"
+  const [view, setView] = useState("upload"); // "upload" | "breakdown" | "script" | "review"
   const [breakdown, setBreakdown] = useState(null);
   const [scriptData, setScriptData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -31,6 +32,7 @@ function MainApp() {
   const [voices, setVoices] = useState([]);
   const [showPostActionAdjust, setShowPostActionAdjust] = useState(false);
   const [postActionBreakdownId, setPostActionBreakdownId] = useState(null);
+  const [reviewScriptId, setReviewScriptId] = useState(null);
 
   useEffect(() => {
     axios.get(`${API}/tts/status`).then(r => setTtsAvailable(r.data.available)).catch(() => {});
@@ -315,6 +317,14 @@ function MainApp() {
   }, []);
 
   const handleLoadScript = useCallback(async (scriptId) => {
+    // Go to review screen first so user can confirm cleaned text
+    setReviewScriptId(scriptId);
+    setView("review");
+  }, []);
+
+  const handleReviewConfirmed = useCallback(async () => {
+    // After user confirms cleaned text, load the script normally
+    const scriptId = reviewScriptId;
     setLoading(true);
     try {
       const response = await axios.get(`${API}/scripts/${scriptId}`);
@@ -339,7 +349,8 @@ function MainApp() {
       toast.error("Could not load this script.");
     }
     setLoading(false);
-  }, []);
+    setReviewScriptId(null);
+  }, [reviewScriptId]);
 
   const handleAdjusted = useCallback((updatedBreakdown) => {
     // Update single breakdown view
@@ -410,6 +421,15 @@ function MainApp() {
             <UploadPage onAnalyze={handleAnalyze} onFullScriptAnalyze={handleFullScriptAnalyze} recentBreakdowns={recentBreakdowns} recentScripts={recentScripts} onLoadBreakdown={handleLoadBreakdown} onLoadScript={handleLoadScript} loading={loading} />
           </motion.div>
         )}
+        {!loading && view === "review" && reviewScriptId && (
+          <motion.div key="review" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            <ScriptReview
+              scriptId={reviewScriptId}
+              onConfirm={handleReviewConfirmed}
+              onBack={() => { setView("upload"); setReviewScriptId(null); }}
+            />
+          </motion.div>
+        )}
         {!loading && view === "breakdown" && breakdown && (
           <motion.div key="breakdown" initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.4 }}>
             <BreakdownView
@@ -436,6 +456,7 @@ function MainApp() {
               onOpenMemorization={(b) => { setActiveScriptBreakdown(b); setMemorizationOpen(true); }}
               onOpenSceneReader={(b) => { setActiveScriptBreakdown(b); setSceneReaderOpen(true); }}
               onExportPdf={(id) => window.open(`${API}/export-pdf/${id}`, "_blank")}
+              onReviewScript={() => { setReviewScriptId(scriptData.script_id); setView("review"); }}
               onShare={(id) => {
                 const url = `${window.location.origin}/share/${id}`;
                 navigator.clipboard.writeText(url).then(() => toast.success("Share link copied")).catch(() => toast.info(url));

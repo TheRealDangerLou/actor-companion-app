@@ -100,6 +100,136 @@ def estimate_cost(mode: str) -> float:
     return 0.08 if mode == "deep" else 0.03
 
 
+
+# --- Deterministic Script Cleaning (zero GPT) ---
+
+def clean_script_text(raw_text: str) -> str:
+    """Clean raw OCR/PDF-extracted text into standard screenplay format.
+    
+    Pure function: same input always produces same output.
+    Zero GPT calls, zero credits, zero network.
+    
+    Handles: page numbers, (MORE)/(CONT'D) joins, concatenated scene numbers,
+    missing blank lines before character names, trailing whitespace.
+    """
+    if not raw_text:
+        return ""
+
+    lines = raw_text.split("\n")
+    
+    # --- Pass 1: Strip page-number-only lines ---
+    # Pattern: optional whitespace, digits, period, optional whitespace
+    # e.g. "                                                         15. "
+    cleaned = []
+    for line in lines:
+        if re.match(r'^\s*\d+\.\s*$', line):
+            continue  # drop page number lines entirely
+        cleaned.append(line)
+    lines = cleaned
+
+    # --- Pass 2: Join (MORE) / (CONT'D) page-break splits ---
+    # Find (MORE) → remove it and the following SAME_NAME (CONT'D) header
+    # so the dialogue before and after merge naturally
+    joined = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        
+        # Detect (MORE) marker
+        if re.match(r'^\(MORE\)$', stripped, re.IGNORECASE):
+            # Look ahead: skip blanks, find CHAR (CONT'D), skip it
+            j = i + 1
+            while j < len(lines) and not lines[j].strip():
+                j += 1
+            if j < len(lines) and re.search(r"\(CONT'?D\)", lines[j], re.IGNORECASE):
+                # Skip both (MORE) and the CONT'D header
+                i = j + 1
+                continue
+            # If no matching CONT'D found, keep the line as-is
+        
+        # Detect standalone CONT'D headers (without preceding MORE)
+        # e.g. "FELIX (CONT'D)" → keep as "FELIX" (strip the tag, keep the name)
+        contd_match = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)\s*\(CONT\'?D\)\s*$', stripped, re.IGNORECASE)
+        if contd_match:
+            joined.append(contd_match.group(1).strip())
+            i += 1
+            continue
+        
+        joined.append(lines[i])
+        i += 1
+    lines = joined
+
+    # --- Pass 3: Fix concatenated scene numbers in headings ---
+    # "20INT. BAR - NIGHT" → "INT. BAR - NIGHT"
+    # "13INT. ELLIE'S HOUSE" → "INT. ELLIE'S HOUSE"
+    fixed = []
+    for line in lines:
+        s = line.strip()
+        m = re.match(r'^(\d+)((?:INT|EXT|INT/EXT)\..*)$', s)
+        if m:
+            fixed.append(m.group(2))
+        else:
+            fixed.append(line.rstrip())
+    lines = fixed
+
+    # --- Pass 4: Normalize whitespace ---
+    # Strip heavy indentation (common in PDF extraction)
+    # Preserve relative indentation for parentheticals only
+    normalized = []
+    for line in lines:
+        # Strip leading whitespace entirely — screenplay format doesn't need it
+        # in our cleaned output
+        normalized.append(line.strip())
+    lines = normalized
+
+    # --- Pass 5: Ensure blank lines before character names ---
+    # In clean screenplay format, character names always have a blank line before them.
+    # This is the key fix for the "action absorbed as dialogue" problem:
+    # by guaranteeing structural separation, the parser can reliably detect boundaries.
+    def looks_like_character_name(s):
+        s = s.strip()
+        if not s or len(s) > 60 or len(s) < 2:
+            return False
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
+        if not m:
+            return False
+        name = m.group(1).strip()
+        if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|CUT\.|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|END OF|THE END)', name):
+            return False
+        alpha_only = re.sub(r'[\s\.\'\-]', '', name)
+        if len(alpha_only) < 2:
+            return False
+        return True
+
+    spaced = []
+    for idx, line in enumerate(lines):
+        # If this line is a character name and previous line is non-blank
+        if looks_like_character_name(line) and idx > 0 and lines[idx - 1].strip():
+            spaced.append("")  # insert blank line
+        spaced.append(line)
+    lines = spaced
+
+    # --- Pass 6: Collapse multiple blank lines to max 1 ---
+    final = []
+    prev_blank = False
+    for line in lines:
+        if not line.strip():
+            if not prev_blank:
+                final.append("")
+            prev_blank = True
+        else:
+            final.append(line)
+            prev_blank = False
+
+    # Strip leading/trailing blank lines
+    while final and not final[0].strip():
+        final.pop(0)
+    while final and not final[-1].strip():
+        final.pop()
+
+    return "\n".join(final)
+
+
 # --- Deterministic Line Extraction (zero GPT) ---
 
 def extract_character_lines(text: str, character_name: str) -> dict:
@@ -1710,9 +1840,10 @@ async def get_script(script_id: str):
     for bid in breakdown_ids:
         b = await db.breakdowns.find_one({"id": bid}, {"_id": 0})
         if b:
-            # Re-parse memorization with current parser to fix stale data
-            if character_name and b.get("original_text"):
-                fresh_mem = extract_character_lines(b["original_text"], character_name)
+            # Use cleaned_text if available, otherwise fall back to original_text
+            parse_text = b.get("cleaned_text") or b.get("original_text", "")
+            if character_name and parse_text:
+                fresh_mem = extract_character_lines(parse_text, character_name)
                 b["memorization"] = fresh_mem
             breakdowns.append(b)
 
@@ -1896,6 +2027,106 @@ async def parse_lines(request: ParseLinesRequest):
         "line_count": len(result["cue_recall"]),
         "memorization": result,
     }
+
+
+
+class CleanTextRequest(BaseModel):
+    text: str
+
+
+class CleanScriptRequest(BaseModel):
+    script_id: str
+
+
+class SaveCleanedTextRequest(BaseModel):
+    script_id: str
+    breakdown_id: str
+    cleaned_text: str
+
+
+@api_router.post("/clean-text")
+async def clean_text_endpoint(request: CleanTextRequest):
+    """Deterministic script cleaning — zero GPT, zero credits.
+    Returns cleaned text for user review/edit."""
+    cleaned = clean_script_text(request.text)
+    return {"cleaned_text": cleaned}
+
+
+@api_router.post("/clean-script")
+async def clean_script_endpoint(request: CleanScriptRequest):
+    """Clean all scenes of an existing script. Returns cleaned texts for review.
+    Zero GPT, zero credits."""
+    script = await db.scripts.find_one({"id": request.script_id}, {"_id": 0})
+    if not script:
+        raise HTTPException(status_code=404, detail="Script not found")
+
+    breakdown_ids = script.get("breakdown_ids", [])
+    scenes = []
+    for bid in breakdown_ids:
+        b = await db.breakdowns.find_one({"id": bid}, {"_id": 0, "id": 1, "original_text": 1, "scene_number": 1, "scene_heading": 1, "cleaned_text": 1})
+        if b:
+            raw = b.get("original_text", "")
+            already_cleaned = b.get("cleaned_text", "")
+            scenes.append({
+                "breakdown_id": b["id"],
+                "scene_number": b.get("scene_number", 0),
+                "scene_heading": b.get("scene_heading", ""),
+                "original_text": raw,
+                "cleaned_text": already_cleaned or clean_script_text(raw),
+                "has_saved_clean": bool(already_cleaned),
+            })
+
+    scenes.sort(key=lambda x: x.get("scene_number", 0))
+    return {
+        "script_id": request.script_id,
+        "character_name": script.get("character_name", ""),
+        "scene_count": len(scenes),
+        "scenes": scenes,
+    }
+
+
+@api_router.post("/save-cleaned-text")
+async def save_cleaned_text(request: SaveCleanedTextRequest):
+    """Save user-confirmed cleaned text for a breakdown.
+    This becomes the single source of truth for all downstream features."""
+    result = await db.breakdowns.update_one(
+        {"id": request.breakdown_id},
+        {"$set": {"cleaned_text": request.cleaned_text}},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Breakdown not found")
+    logger.info(f"[CLEAN] Saved cleaned_text for breakdown {request.breakdown_id[:16]}")
+    return {"status": "ok", "breakdown_id": request.breakdown_id}
+
+
+class SaveCleanedScriptRequest(BaseModel):
+    script_id: str
+    scenes: list
+
+
+@api_router.post("/save-cleaned-script")
+async def save_cleaned_script(request: SaveCleanedScriptRequest):
+    """Batch save cleaned text for all scenes of a script."""
+    script_id = request.script_id
+    scenes = request.scenes
+    if not script_id or not scenes:
+        raise HTTPException(status_code=400, detail="script_id and scenes required")
+
+    saved = 0
+    for scene in scenes:
+        bid = scene.get("breakdown_id") if isinstance(scene, dict) else None
+        ct = scene.get("cleaned_text", "") if isinstance(scene, dict) else ""
+        if not bid or not ct:
+            continue
+        await db.breakdowns.update_one(
+            {"id": bid},
+            {"$set": {"cleaned_text": ct}},
+        )
+        saved += 1
+
+    logger.info(f"[CLEAN] Saved cleaned_text for {saved}/{len(scenes)} scenes of script {script_id}")
+    return {"status": "ok", "saved": saved, "total": len(scenes)}
+
 
 
 @api_router.post("/debug/parse-audit")

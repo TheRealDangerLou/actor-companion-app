@@ -1,0 +1,109 @@
+{
+  "summary": "Completed testing of Phase 1 Script Cleaning Layer. All 17 backend API tests passed. All frontend UI tests passed. The deterministic cleaning function correctly normalizes raw PDF OCR text, the review/edit screen works properly, and cleaned_text is saved to MongoDB and used as the source of truth for line extraction.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "POST /api/clean-text - strips page numbers, normalizes whitespace - PASS",
+    "POST /api/clean-text - joins (MORE)/(CONT'D) page-break splits - PASS",
+    "POST /api/clean-text - fixes concatenated scene numbers (20INT. -> INT.) - PASS",
+    "POST /api/clean-text - adds blank lines before character names - PASS",
+    "POST /api/clean-text - handles empty input - PASS",
+    "POST /api/clean-script - returns all scenes with cleaned text for booked script - PASS",
+    "POST /api/clean-script - returns scenes sorted by scene_number - PASS",
+    "POST /api/clean-script - works for older script - PASS",
+    "POST /api/clean-script - returns 404 for non-existent script - PASS",
+    "POST /api/save-cleaned-script - batch saves cleaned text for scenes - PASS",
+    "POST /api/save-cleaned-script - returns 400 for empty scenes - PASS",
+    "POST /api/save-cleaned-text - saves single breakdown cleaned text - PASS",
+    "POST /api/save-cleaned-text - returns 404 for non-existent breakdown - PASS",
+    "GET /api/scripts/{id} - uses cleaned_text for line extraction - PASS",
+    "GET /api/scripts/{id} - falls back to original_text when cleaned_text not available - PASS",
+    "clean_script_text - collapses multiple blank lines - PASS",
+    "clean_script_text - strips leading/trailing blanks - PASS",
+    "Script Review screen loads when clicking a script from home page - PASS",
+    "Review screen shows scene tabs with correct navigation - PASS",
+    "Edit button toggles to editable textarea - PASS",
+    "Preview button toggles back to preview mode - PASS",
+    "Reset button present (restores auto-cleaned version) - PASS",
+    "Confirm All button saves all scenes and redirects to ScriptOverview - PASS",
+    "Review Script button in ScriptOverview header opens review screen - PASS",
+    "My Lines tab shows correct cue/line pairs parsed from cleaned text (6 lines found) - PASS",
+    "Full Scene tab shows full scene text - PASS",
+    "Breakdown tab shows AI analysis - PASS"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_script_cleaning.py",
+    "/app/test_reports/pytest/script_cleaning_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "clean_script_text() function (server.py lines 104-230) is well-implemented with 6 passes: strip page numbers, join MORE/CONT'D, fix scene number prefixes, normalize whitespace, add blank lines before character names, collapse multiple blanks",
+    "GET /api/scripts/{id} (line 1843-1844) correctly uses cleaned_text with fallback to original_text: parse_text = b.get('cleaned_text') or b.get('original_text', '')",
+    "ScriptReview.jsx properly loads scenes via /api/clean-script, maintains editedTexts state, and saves via /api/save-cleaned-script",
+    "App.js correctly routes to review screen first (handleLoadScript -> setView('review')), then to ScriptOverview after confirmation (handleReviewConfirmed)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_script_cleaning.py"
+  ],
+  "success_rate": {
+    "backend": "100% (17/17 tests passed)",
+    "frontend": "100% (10/10 UI tests passed)"
+  },
+  "seed_data_creation": "Used existing Felix scripts: 67c7477b-b334-40f8-ab1f-6cc08cd2b21a (BOOKED, 21 scenes) and 473f064c-dedd-475d-90de-091ee54ca708 (older)",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Script Cleaning Layer (Phase 1) fully tested. Key endpoints: /api/clean-text (deterministic cleaning), /api/clean-script (clean all scenes), /api/save-cleaned-script (batch save), /api/save-cleaned-text (single save). ScriptReview.jsx component handles review/edit flow with data-testid attributes: script-review, review-scene-tab-{i}, toggle-edit-btn, scene-edit-textarea, scene-preview, reset-scene-btn, confirm-all-btn, review-back-btn. ScriptOverview has review-script-btn to re-open review. cleaned_text is persisted to MongoDB breakdowns collection and used by GET /api/scripts/{id} for line extraction.",
+  "features_verified": {
+    "clean_text_endpoint": {
+      "status": "WORKING",
+      "details": "POST /api/clean-text accepts raw text and returns cleaned text with page numbers stripped, MORE/CONT'D joined, scene numbers fixed, whitespace normalized"
+    },
+    "clean_script_endpoint": {
+      "status": "WORKING",
+      "details": "POST /api/clean-script accepts script_id and returns all scenes with cleaned_text, sorted by scene_number"
+    },
+    "save_cleaned_script_endpoint": {
+      "status": "WORKING",
+      "details": "POST /api/save-cleaned-script accepts script_id and scenes array, persists cleaned_text to MongoDB breakdowns"
+    },
+    "save_cleaned_text_endpoint": {
+      "status": "WORKING",
+      "details": "POST /api/save-cleaned-text saves cleaned_text for a single breakdown"
+    },
+    "get_script_uses_cleaned_text": {
+      "status": "WORKING",
+      "details": "GET /api/scripts/{id} uses cleaned_text for line extraction when available, falls back to original_text"
+    },
+    "script_review_screen": {
+      "status": "WORKING",
+      "details": "Loads when clicking a script from home page, shows all scenes with navigation tabs"
+    },
+    "edit_preview_toggle": {
+      "status": "WORKING",
+      "details": "Edit button toggles to editable textarea, Preview button toggles back"
+    },
+    "reset_button": {
+      "status": "WORKING",
+      "details": "Reset button present to restore auto-cleaned version"
+    },
+    "confirm_all_button": {
+      "status": "WORKING",
+      "details": "Saves all scenes and redirects to ScriptOverview"
+    },
+    "review_script_button": {
+      "status": "WORKING",
+      "details": "Review Script button in ScriptOverview header opens the review screen"
+    },
+    "my_lines_tab": {
+      "status": "WORKING",
+      "details": "Shows correct cue/line pairs parsed from cleaned text (6 lines found in Scene 1)"
+    }
+  }
+}

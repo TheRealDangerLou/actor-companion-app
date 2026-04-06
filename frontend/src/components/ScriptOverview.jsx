@@ -34,6 +34,7 @@ export default function ScriptOverview({
   onReanalyzeDeep,
   onAdjusted,
   onSelectBreakdown,
+  onReviewScript,
 }) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [retrying, setRetrying] = useState(false);
@@ -93,6 +94,17 @@ export default function ScriptOverview({
                 </Badge>
               )}
             </div>
+            {onReviewScript && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onReviewScript}
+                className="shrink-0 text-xs h-7 gap-1.5 border-zinc-700 text-zinc-400 hover:text-zinc-200"
+                data-testid="review-script-btn"
+              >
+                <FileText className="w-3.5 h-3.5" /> Review Script
+              </Button>
+            )}
           </div>
 
           {/* Scene tabs */}
