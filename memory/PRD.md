@@ -1,118 +1,99 @@
 # Actor's Companion - PRD
 
 ## Problem Statement
-Build a clean, fast web app called "Actor's Companion" where actors upload audition sides (text or image) and get an AI-powered professional acting breakdown that's immediately playable and text-grounded.
+Build a clean, fast web app called "Actor's Companion" where actors upload audition sides (text, image, PDF) and get a reliable tool to go from script to confident performance as fast as possible. Core user needs: understand the scene, learn lines reliably, rehearse hands-free, prep auditions and self-tapes quickly.
 
 ## Architecture
 - **Frontend**: React + Tailwind + shadcn/ui + framer-motion
-- **Backend**: FastAPI + MongoDB
-- **AI**: GPT-5.2 via Emergent LLM Key (text analysis + image vision/OCR)
-- **TTS**: ElevenLabs (live with paid key)
-- **PDF Rendering**: pymupdf (scanned PDFs -> per-page OCR)
+- **Backend**: FastAPI (Python) + MongoDB (Motor async)
+- **AI**: GPT-5.2 via Emergent LLM Key (scene analysis only)
+- **TTS**: ElevenLabs (SceneReader hands-free mode)
+- **PDF**: pymupdf (OCR extraction)
 
 ## What's Implemented
 
-### Cost Optimization System (P0 - Feb 2026)
-- **Caching Layer**: SHA256 hash of (text + mode + character_name + cache_version) -> MongoDB `breakdown_cache` collection
-  - 72-hour TTL with automatic expiration
-  - Cache versioning (bump `CACHE_VERSION` when prompts change)
-  - `from_cache: true` flag on cached responses
-  - Full cost logging: [COST] CACHE HIT/MISS on every request
-- **Check-Cache Endpoints**: `POST /api/check-cache` and `POST /api/check-cache/batch` for frontend pre-flight cost estimation
-- **Debug Pipeline**: `/api/debug/pipeline` no longer makes GPT calls
-- **Prompt Optimization**: REGENERATE_TAKES_PROMPT and ADJUST_TAKES_PROMPT reduced by ~60% token count
-- **Scene Text Hard Cap**: 8000 chars max before any processing (SCENE_TEXT_HARD_CAP)
-- **Text Truncation**: regenerate-takes now only sends first 3000 chars of scene text
-- **Submission Guards**: isSubmitting state prevents duplicate button clicks
-- **Scene-Level Error Reporting**: Backend categorizes errors into 402 (budget), 429 (rate limit), 503 (service unavailable), 504 (timeout), 500 (other)
-- **Failed Scene Retry**: Red-flagged tabs for failed scenes, retry card with specific error type badge
-- **GPT Timeout Reduced**: Lowered to 55s per scene to stay under proxy timeout
+### Phase 1: Script Cleaning Layer (Apr 2026) — COMPLETE
+- **`clean_script_text()`** — deterministic pure function, zero GPT, zero credits
+  - Strips page number lines (e.g., `"15."`)
+  - Joins `(MORE)/(CONT'D)` page-break splits into single speech blocks
+  - Fixes concatenated scene numbers (`"20INT."` → `"INT."`)
+  - Normalizes whitespace (strips indentation, collapses blank lines)
+  - Ensures blank lines before character names (fixes action-as-dialogue absorption)
+  - Strips `(CONT'D)` from character names (preserves speaker attribution)
+- **`cleaned_text` field** — stored on breakdown documents in MongoDB
+  - Computed once, saved permanently
+  - Becomes single source of truth for all downstream features
+  - `get_script()` uses `cleaned_text` when available, falls back to `original_text`
+- **Script Review Screen** (`ScriptReview.jsx`)
+  - Opens automatically when loading any script
+  - Shows cleaned text in preview mode with scene navigation tabs
+  - **Editable** — user can manually correct any scene before confirming
+  - Reset button restores auto-cleaned version
+  - "Confirm All N Scenes" saves all cleaned text to MongoDB
+  - "Review Script" button in ScriptOverview header for re-review
+- **New API Endpoints:**
+  - `POST /api/clean-text` — clean raw text (deterministic, zero cost)
+  - `POST /api/clean-script` — clean all scenes of an existing script
+  - `POST /api/save-cleaned-script` — batch save confirmed cleaned text
+  - `POST /api/save-cleaned-text` — save single scene's cleaned text
 
-### Deterministic Line Extraction & Trust Layer (Feb-Mar 2026)
-- **Deterministic Parser**: `extract_character_lines()` uses regex pattern matching to find CHARACTER NAME + dialogue blocks from raw script text. Zero GPT, zero credits, zero hallucination
-- **Memorization Override**: Both `/api/analyze/scene` and `/api/analyze/text` override GPT's memorization data with deterministic extraction
-- **`POST /api/parse-lines`**: Standalone endpoint for extracting lines without any analysis
-- **3-Tab Scene View**: ScriptOverview now has My Lines | Full Scene | Breakdown tabs
-- **Booked Role Default**: When prepMode is "booked", My Lines tab is the default view on load
-- **Lines First Landing**: Prominent hero card with line count, instant "Memorize" and "Run Lines" buttons
-- **Parser Edge Cases Fixed (Mar 2026)**:
-  - `(MORE)` / `(CONT'D)` page-break splits correctly join into single continuous speech
-  - `"I..."` no longer falsely flagged as single-letter character name
-  - Action text after page number skips correctly detected and excluded
-  - 12 additional action verbs added (apologizes, stammers, wipes, twists, etc.)
-  - 16/16 regression tests passing
+### Parser & Trust Layer (Feb-Mar 2026)
+- Deterministic `extract_character_lines()` — regex pattern matching, zero GPT
+- `(MORE)/(CONT'D)` joins, `"I..."` false name prevention, action verb detection
+- 16/16 regression tests passing
 
-### Scene/Episode Ordering (P1 - Mar 2026)
-- **Backend sort**: `get_script()` now sorts breakdowns by `scene_number` before returning
-- Episodes display in correct ascending order in horizontal tab bar
+### Scene/Episode Ordering (Mar 2026)
+- `get_script()` sorts breakdowns by `scene_number`
 
-### Genre-Aware Analysis (Feb 2026)
-- **Vertical / Soap project type**: New option for vertical short-form drama and soap-style series
-- **Episode Parser**: Scene splitter recognizes `EPISODE X`, `EP X`, `EP. X`, `CHAPTER X`, and `#X` markers
-- **Genre Direction Injection**: When project_type is "vertical", GPT receives specific genre context
+### Analysis Engine (Feb 2026)
+- Per-scene GPT analysis: summary, objective, stakes, beats, acting takes
+- Genre-aware (vertical/soap project type)
+- Caching layer with SHA256 hash + 72-hour TTL
 
-### Script Persistence & Performance (Feb 2026)
-- **My Scripts List**: `GET /api/scripts` returns recent scripts with metadata
-- **Script Loading**: Clicking a script loads all breakdowns via `GET /api/scripts/{id}` — zero GPT calls
-- **Parallel Batching**: Full script analysis processes scenes in batches of 3 via Promise.all
-- **Zero-Credit Rehearsal**: MemorizationMode has zero network calls. SceneReader only calls TTS endpoint
+### Rehearsal Modes
+- My Lines (read-through with blur ladder)
+- Line Run (tap-to-reveal flashcard drill)
+- Scene Reader (TTS reads cues, actor speaks lines)
+- Cue & Recall
+- Progressive memorization (4 blur levels)
 
-### Analysis Engine v3 (Behavioral, Text-Grounded)
-- Observable-first principle: everything anchored in provable text
-- Behavior + Effect per beat (replaces emotion labels)
-- Deep mode: Tactical Arc, what they hide, layered subtext, physical life
-
-### Full Script Mode
-- Upload/paste full screenplay (PDF, image, text)
-- Character name -> finds all scenes containing that character
-- Scene detection: regex (INT./EXT.) + GPT fallback
-- Prep Mode: Audition / Booked / Silent / Study
-- Project Type: Commercial / TV-Film / Theatre / Voiceover
-- Per-scene analysis with parallel batching
-
-### Adjustment Loop (Performance Feedback)
-- 5 adjustment options
-- Adjustments stack (each builds on previous)
-- Only acting takes regenerated (fast ~10s)
-
-### Voice Selection for Scene Reader
-- 10 curated ElevenLabs voices
-
-### Memorization Suite (4 modes)
-- My Lines, Line Run, Reader, Cue & Recall
-- Progressive blur ladder (4 levels)
-- End-of-scene prompts (Repeat/Harder/Done)
+### Script Management
+- Upload: PDF, image, pasted text
+- Scene splitting (INT./EXT./EPISODE markers)
+- Character name extraction
+- Parallel batch analysis
+- My Scripts list with persistence
 
 ## Key API Endpoints
-- `POST /api/extract-text` — Extract text from PDF/image
-- `POST /api/analyze/text` — Analyze text script (with caching)
-- `POST /api/analyze/scene` — Analyze single scene (with caching)
-- `POST /api/adjust-takes/{id}` — Adjust acting takes with stacking feedback
-- `POST /api/parse-scenes` — Parse full script into scenes
-- `POST /api/parse-lines` — Deterministic line extraction (zero GPT)
-- `POST /api/scripts/create` — Initialize script record
-- `GET /api/scripts/{id}` — Retrieve full script with breakdowns (sorted by scene_number)
-- `GET /api/scripts` — List recent scripts
-- `POST /api/tts/generate` — TTS audio (accepts voice_id)
-- `GET /api/tts/voices` — 10 curated voices
-- `POST /api/check-cache` — Check if a breakdown is cached
-- `POST /api/check-cache/batch` — Check cache status for multiple scenes
-- `GET /api/debug/pipeline` — System health check (no GPT call)
+- `POST /api/clean-text` — deterministic cleaning (zero GPT)
+- `POST /api/clean-script` — clean all scenes of a script
+- `POST /api/save-cleaned-script` — batch save cleaned text
+- `POST /api/save-cleaned-text` — save single scene cleaned text
+- `POST /api/extract-text` — PDF/image OCR
+- `POST /api/analyze/text` — analyze with caching
+- `POST /api/analyze/scene` — analyze single scene
+- `POST /api/parse-lines` — deterministic line extraction
+- `GET /api/scripts/{id}` — full script with breakdowns (uses cleaned_text)
+- `GET /api/scripts` — list scripts
+- `POST /api/tts/generate` — TTS audio
+- `GET /api/tts/voices` — voice list
 
 ## Prioritized Backlog
+
 ### P2 (Next)
-- [ ] Cheapest useful continuous read-through (My Lines + cues, play/pause/skip, deterministic only)
+- [ ] Full uninterrupted read-through (My Lines + cues across all scenes, play/pause/skip)
+- [ ] Line learner refinements
+- [ ] Audition prep tools
+- [ ] Self-tape setup suggestions
 
 ### Frozen (Do Not Build)
 - [ ] CD POV
-- [ ] Take Comparison Tool
+- [ ] Take Comparison
 - [ ] Auto voice suggestions
 - [ ] Audition Tracker
 - [ ] User accounts & auth
-- [ ] Memorization Timer
 
-## Current Status
-- **Parser**: Stable. P0 approved. 16/16 regression tests. (MORE)/(CONT'D) joins working.
-- **Ordering**: P1 fixed. Episodes display in correct ascending order.
-- **App**: Fully functional, no known bugs.
-- **Priority**: P2 — Continuous read-through. Frozen features must not be touched.
+## Testing
+- Phase 1: 27/27 tests passed (17 backend, 10 frontend) — iteration_24.json
+- Parser: 16/16 regression tests
+- Backend test file: `/app/backend/tests/test_script_cleaning.py`
