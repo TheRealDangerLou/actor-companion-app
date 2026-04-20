@@ -40,6 +40,12 @@ api_router = APIRouter(prefix="/api")
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
+# Serve uploaded files
+from fastapi.staticfiles import StaticFiles
+_upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(_upload_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=_upload_dir), name="uploads")
+
 # --- ElevenLabs TTS Setup ---
 eleven_client = None
 try:
@@ -1019,6 +1025,239 @@ async def delete_project(project_id: str):
     await db.documents.delete_many({"project_id": project_id})
     await db.projects.delete_one({"id": project_id})
     return {"status": "deleted", "project_id": project_id}
+
+
+
+# ============================================================
+# DOCUMENT UPLOAD & MANAGEMENT (Phase 1 — Feature #2)
+# ============================================================
+
+UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+
+@api_router.post("/projects/{project_id}/documents")
+async def upload_document(
+    project_id: str,
+    file: UploadFile = File(None),
+    pasted_text: Optional[str] = Form(None),
+    doc_type: Optional[str] = Form("unknown"),
+):
+    """Upload a document (PDF, image) or paste text. Extracts text and attaches to project."""
+    # Verify project exists
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Check document limit
+    existing_count = await db.documents.count_documents({"project_id": project_id})
+    if existing_count >= 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 documents per project.")
+
+    doc_id = str(uuid.uuid4())
+    filename = ""
+    file_url = ""
+    original_text = ""
+    extraction_method = ""
+
+    if file and file.filename:
+        # File upload path
+        try:
+            contents = await file.read()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
+
+        if len(contents) > 20 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="File must be under 20MB.")
+        if len(contents) == 0:
+            raise HTTPException(status_code=400, detail="File is empty.")
+
+        filename = file.filename or "unnamed"
+        file_type = detect_file_type(file.content_type, file.filename, contents)
+
+        # Save original file
+        safe_name = f"{doc_id}_{filename.replace('/', '_')}"
+        file_path = os.path.join(UPLOAD_DIR, safe_name)
+        with open(file_path, "wb") as f:
+            f.write(contents)
+        file_url = f"/uploads/{safe_name}"
+
+        # Extract text
+        if file_type == "pdf":
+            extraction_method = "pdf"
+            try:
+                from PyPDF2 import PdfReader
+                pdf_reader = PdfReader(io.BytesIO(contents))
+                for page in pdf_reader.pages:
+                    page_text = page.extract_text()
+                    if page_text:
+                        original_text += page_text + "\n"
+                original_text = original_text.strip()
+            except Exception as e:
+                logger.error(f"[doc-upload] PDF text extraction failed: {e}")
+
+            # Fallback to Vision OCR if text too short
+            if len(original_text) < 30:
+                extraction_method = "pdf_ocr"
+                try:
+                    page_images = pdf_pages_to_images(contents, max_pages=10, dpi=200)
+                    api_key = os.environ.get('EMERGENT_LLM_KEY')
+                    if api_key:
+                        all_page_text = []
+                        for page_num, page_jpeg in enumerate(page_images):
+                            b64 = base64.b64encode(page_jpeg).decode('utf-8')
+                            try:
+                                ocr_chat = LlmChat(
+                                    api_key=api_key,
+                                    session_id=str(uuid.uuid4()),
+                                    system_message="Extract ALL text from this image exactly as written. Preserve line breaks, character names, stage directions, and formatting. Return only the extracted text, nothing else."
+                                ).with_model("openai", "gpt-5.2")
+                                ocr_msg = UserMessage(
+                                    text="Extract all text from this script page.",
+                                    file_contents=[ImageContent(image_base64=b64)]
+                                )
+                                page_text = await asyncio.wait_for(ocr_chat.send_message(ocr_msg), timeout=60)
+                                all_page_text.append(page_text.strip())
+                            except Exception as e:
+                                logger.warning(f"[doc-upload] Page {page_num+1} OCR failed: {e}")
+                                all_page_text.append(f"[Page {page_num+1}: OCR failed]")
+                        original_text = "\n\n".join(all_page_text)
+                except Exception as e:
+                    logger.error(f"[doc-upload] PDF OCR fallback failed: {e}")
+
+        elif file_type == "image":
+            extraction_method = "image_ocr"
+            try:
+                img_bytes = prepare_image_for_vision(contents)
+                b64 = base64.b64encode(img_bytes).decode('utf-8')
+                api_key = os.environ.get('EMERGENT_LLM_KEY')
+                if api_key:
+                    ocr_chat = LlmChat(
+                        api_key=api_key,
+                        session_id=str(uuid.uuid4()),
+                        system_message="Extract ALL text from this image exactly as written. Preserve line breaks, character names, stage directions, and formatting. Return only the extracted text, nothing else."
+                    ).with_model("openai", "gpt-5.2")
+                    ocr_msg = UserMessage(
+                        text="Extract all text from this script page.",
+                        file_contents=[ImageContent(image_base64=b64)]
+                    )
+                    original_text = await asyncio.wait_for(ocr_chat.send_message(ocr_msg), timeout=60)
+                    original_text = original_text.strip()
+            except Exception as e:
+                logger.error(f"[doc-upload] Image OCR failed: {e}")
+                raise HTTPException(status_code=500, detail=f"Could not extract text from image: {e}")
+        else:
+            # Try to read as plain text
+            extraction_method = "text"
+            try:
+                original_text = contents.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                raise HTTPException(status_code=400, detail="Unsupported file type. Upload a PDF, image, or text file.")
+
+    elif pasted_text and pasted_text.strip():
+        # Pasted text path
+        filename = "pasted_text.txt"
+        original_text = pasted_text.strip()
+        extraction_method = "paste"
+    else:
+        raise HTTPException(status_code=400, detail="Provide a file or pasted text.")
+
+    # Validate we got text
+    if len(original_text) < 5:
+        raise HTTPException(status_code=400, detail="Could not extract enough text. Try a clearer file or paste the text manually.")
+
+    # Validate doc_type
+    valid_types = {"sides", "instructions", "wardrobe", "notes", "reference", "unknown"}
+    if doc_type not in valid_types:
+        doc_type = "unknown"
+
+    # Create document record
+    doc = {
+        "id": doc_id,
+        "project_id": project_id,
+        "type": doc_type,
+        "filename": filename,
+        "original_text": original_text,
+        "cleaned_text": None,
+        "is_confirmed": False,
+        "file_url": file_url,
+        "extraction_method": extraction_method,
+        "char_count": len(original_text),
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.documents.insert_one(doc)
+    doc.pop("_id", None)
+
+    # Add document ID to project
+    await db.projects.update_one(
+        {"id": project_id},
+        {
+            "$push": {"document_ids": doc_id},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+
+    logger.info(f"[doc-upload] Saved doc {doc_id[:12]} for project {project_id[:12]}: {filename}, {len(original_text)} chars, method={extraction_method}")
+    return doc
+
+
+@api_router.get("/projects/{project_id}/documents")
+async def list_project_documents(project_id: str):
+    """List all documents for a project."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    docs = await db.documents.find(
+        {"project_id": project_id},
+        {"_id": 0, "original_text": 0},  # Exclude large text from list
+    ).to_list(length=50)
+    return docs
+
+
+@api_router.get("/documents/{doc_id}")
+async def get_document(doc_id: str):
+    """Get a single document with full text."""
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return doc
+
+
+@api_router.put("/documents/{doc_id}/type")
+async def update_document_type(doc_id: str, request: dict):
+    """Update the document type (user override)."""
+    new_type = request.get("type", "unknown")
+    valid_types = {"sides", "instructions", "wardrobe", "notes", "reference", "unknown"}
+    if new_type not in valid_types:
+        raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(valid_types)}")
+    result = await db.documents.update_one({"id": doc_id}, {"$set": {"type": new_type}})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"status": "ok", "type": new_type}
+
+
+@api_router.delete("/documents/{doc_id}")
+async def delete_document(doc_id: str):
+    """Delete a document and remove from project."""
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    # Remove from project's document_ids
+    await db.projects.update_one(
+        {"id": doc.get("project_id")},
+        {
+            "$pull": {"document_ids": doc_id},
+            "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
+        },
+    )
+    # Delete file if exists
+    if doc.get("file_url"):
+        file_path = os.path.join(UPLOAD_DIR, os.path.basename(doc["file_url"]))
+        if os.path.exists(file_path):
+            os.remove(file_path)
+    await db.documents.delete_one({"id": doc_id})
+    return {"status": "deleted", "doc_id": doc_id}
+
 
 
 

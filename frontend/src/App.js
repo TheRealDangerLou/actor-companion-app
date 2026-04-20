@@ -7,6 +7,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import ProjectHome from "@/components/ProjectHome";
 import ProjectCreate from "@/components/ProjectCreate";
+import DocumentUpload from "@/components/DocumentUpload";
 import UploadPage from "@/components/UploadPage";
 import BreakdownView from "@/components/BreakdownView";
 import MemorizationMode from "@/components/MemorizationMode";
@@ -20,9 +21,10 @@ import ParseAudit from "@/components/ParseAudit";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function MainApp() {
-  const [view, setView] = useState("home"); // "home" | "create" | "upload" | "breakdown" | "script" | "review"
+  const [view, setView] = useState("home"); // "home" | "create" | "project" | "upload" | "breakdown" | "script" | "review"
   const [createMode, setCreateMode] = useState("audition");
   const [activeProjectId, setActiveProjectId] = useState(null);
+  const [activeProject, setActiveProject] = useState(null);
   const [breakdown, setBreakdown] = useState(null);
   const [scriptData, setScriptData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -167,17 +169,30 @@ function MainApp() {
 
   const handleProjectCreated = useCallback((project) => {
     setActiveProjectId(project.id);
-    // After creation, go to upload flow for this project (will be Feature #2)
-    // For now, return to home to see the new project
-    setView("home");
+    setActiveProject(project);
+    setView("project");
   }, []);
 
-  const handleOpenProject = useCallback((projectId) => {
-    setActiveProjectId(projectId);
-    // For now, just store the active project. Feature #2 will add the upload/doc flow.
-    // Once there are documents, this will open the prep dashboard.
-    setView("home");
-    toast.info("Project opened. Document upload coming in Feature #2.");
+  const handleOpenProject = useCallback(async (projectId) => {
+    setLoading(true);
+    try {
+      const resp = await axios.get(`${API}/projects/${projectId}`);
+      setActiveProjectId(projectId);
+      setActiveProject(resp.data);
+      setView("project");
+    } catch {
+      toast.error("Could not open project.");
+    }
+    setLoading(false);
+  }, []);
+
+  const handleDocumentsChanged = useCallback((docs, shouldContinue) => {
+    setActiveProject((prev) => prev ? { ...prev, documents: docs } : prev);
+    if (shouldContinue) {
+      // Will go to review/classification in Feature #3
+      toast.success("Documents saved. Classification & review coming next.");
+      setView("home");
+    }
   }, []);
 
   const [sceneProgress, setSceneProgress] = useState(null); // {current, total, heading}
@@ -449,6 +464,15 @@ function MainApp() {
         {!loading && view === "create" && (
           <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
             <ProjectCreate mode={createMode} onCreated={handleProjectCreated} onBack={() => setView("home")} />
+          </motion.div>
+        )}
+        {!loading && view === "project" && activeProject && (
+          <motion.div key="project" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            <DocumentUpload
+              project={activeProject}
+              onDocumentsChanged={handleDocumentsChanged}
+              onBack={() => setView("home")}
+            />
           </motion.div>
         )}
         {!loading && view === "upload" && (
