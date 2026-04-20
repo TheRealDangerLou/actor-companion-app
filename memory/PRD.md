@@ -33,7 +33,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | 1 | Project CRUD | COMPLETE (19/19 tests) | No |
 | 2 | Multi-document upload + OCR extraction | COMPLETE (29/29 tests) | No |
 | 3 | Deterministic document classification + manual override | COMPLETE (33/33 tests) | No |
-| 4 | Script cleaning + review/edit/confirm | NOT STARTED (reuse existing clean_script_text) | No |
+| 4 | Script cleaning + review/edit/confirm | COMPLETE (14/14 backend + full frontend flow) | No |
 | 5 | Character detection + selection | NOT STARTED | No |
 | 6 | Line extraction + cue pair generation | NOT STARTED (reuse existing extract_character_lines) | No |
 | 7 | Prep Dashboard basics (At-a-Glance, Scenes/My Lines) | NOT STARTED | No |
@@ -66,6 +66,10 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - `GET /api/documents/{id}` — get single document with full text
 - `PUT /api/documents/{id}/type` — change document type
 - `DELETE /api/documents/{id}` — delete document
+- `POST /api/documents/{id}/clean` — deterministic text cleaning
+- `POST /api/projects/{id}/clean-all` — clean all docs in project
+- `POST /api/documents/{id}/confirm` — confirm cleaned text (source of truth)
+- `POST /api/projects/{id}/confirm-all` — batch confirm all docs
 
 ## Implementation Rules
 - One feature at a time
@@ -78,3 +82,4 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - Feature #1 (Project CRUD): /app/test_reports/iteration_25.json — 19/19 passed
 - Feature #2 (Document Upload): /app/test_reports/iteration_26.json — 29/29 passed
 - Feature #3 (Classification): /app/test_reports/iteration_27.json — 33/33 passed
+- Feature #4 (Clean/Review/Confirm): /app/test_reports/iteration_28.json — 14/14 backend + full frontend flow
