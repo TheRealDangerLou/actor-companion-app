@@ -1,0 +1,37 @@
+{
+  "summary": "Feature #5 (Character Detection + Selection) tested end-to-end. Backend: 8/8 pytest tests passed (basic detection, variant normalization, scene heading rejection, frequency ranking, 400 on no confirmed docs, 404 on unknown project, PUT persistence, multi-doc aggregation). Frontend: full flow verified at 390px viewport — create project -> paste script -> continue -> confirm all -> CharacterSelect appears with SARAH (4 lines, Top badge, auto-selected), MARK (3), DETECTIVE JONES (2). Manual entry shows uppercase preview ('CUSTOM HERO'). Confirm saves selection (toast 'Playing: SARAH') and navigates home. Reopening project routes to character-select correctly. Fixed 3 critical blocker bugs in App.js that prevented frontend from compiling and the feature from working at all.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "ProjectCreate (New Audition form)", "issues": ["Date and Time fields use browser-default native pickers (mm/dd/yyyy, --:-- --) instead of shadcn Calendar/TimePicker components — inconsistent with the dark theme and looks unstyled on mobile"]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_character_detection.py",
+    "/app/test_reports/pytest/character_detection_results.xml"
+  ],
+  "action_items": [
+    "(Already fixed by testing agent) App.js had 3 blocking bugs: (1) duplicate garbage code after `export default App;` causing webpack syntax error, (2) handleAllConfirmed navigated to 'home' instead of 'characters' so CharacterSelect was never reachable from review flow, (3) handleCharacterSelected was referenced but never defined causing ReferenceError. Main agent should review the App.js rewrite to ensure intent is preserved.",
+    "(Optional polish) Replace native date/time inputs in ProjectCreate with shadcn Calendar + custom time picker for theme consistency."
+  ],
+  "critical_code_review_comments": [
+    "App.js was left in a broken state (truncated/duplicated tail) — likely a bad search-replace by the implementing agent. Always verify file ends cleanly after edits.",
+    "CharacterSelect.jsx onCharacterSelected callback signature passes only the name string (line 51: onCharacterSelected?.(name)). App.js now updates project state locally with this name; consider returning the updated project from the PUT response for a more authoritative source of truth.",
+    "Backend detect-characters logic is solid — correctly normalizes (V.O.)/(CONT'D)/(O.S.), excludes INT./EXT./CUT TO/FADE OUT, ranks by line count desc, and aggregates across confirmed documents."
+  ],
+  "updated_files": [
+    "/app/frontend/src/App.js (fixed syntax error, added handleCharacterSelected, fixed handleAllConfirmed to route to 'characters')",
+    "/app/backend/tests/test_character_detection.py (new)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (full e2e flow + back navigation + manual entry + uppercase + confirm + persistence)"},
+  "test_credentials": "N/A — no auth in this app",
+  "seed_data_creation": "Created and cleaned up: TEST_CharDetect, TEST_NoConfirm, TEST_MultiDoc projects via API. UI test left TEST_FlowChar project on home (not deleted).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature #5 fully working after App.js fix. All Feature #5 testids verified: character-select, character-back-btn, character-list, character-option-0/1/2, enter-manually-btn, manual-entry, manual-name-input, cancel-manual-btn, confirm-character-btn. Backend endpoint POST /api/projects/{id}/detect-characters works correctly with cleaned_text from confirmed docs. Document upload uses multipart/form-data with 'pasted_text' field (NOT JSON paste-text). Document confirm is POST /api/documents/{doc_id}/confirm with {cleaned_text}. Use /app/backend/tests/test_character_detection.py for regression."
+}

@@ -1420,6 +1420,109 @@ async def confirm_all_documents(project_id: str, request: dict):
 
 
 
+# ============================================================
+# CHARACTER DETECTION & SELECTION (Phase 1 — Feature #5)
+# ============================================================
+
+def detect_characters_from_text(text: str) -> dict:
+    """Scan text for ALL CAPS character names (screenplay dialogue cues).
+    Returns {name: count} mapping with normalized names.
+    
+    Normalization: FELIX, FELIX (CONT'D), FELIX (V.O.), FELIX (O.S.)
+    all map to "FELIX".
+    
+    Deterministic. Zero GPT. Zero credits.
+    """
+    if not text:
+        return {}
+
+    counts = {}
+    skip_prefixes = (
+        "INT.", "EXT.", "INT/EXT.", "I/E.",
+        "FADE", "CUT TO", "CUT.", "DISSOLVE",
+        "SCENE", "ACT ", "END ", "CONTINUED",
+        "THE END", "EPISODE", "EP.", "EP ",
+        "CHAPTER", "TITLE", "CREDITS",
+    )
+
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped or len(stripped) > 60 or len(stripped) < 2:
+            continue
+
+        # Must match the character-name pattern: ALL CAPS, optional parenthetical
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', stripped)
+        if not m:
+            continue
+
+        raw_name = m.group(1).strip()
+
+        # Reject scene headings, transitions, structural markers
+        if any(raw_name.startswith(p) for p in skip_prefixes):
+            continue
+
+        # Reject single-letter or too-short names
+        alpha_only = re.sub(r'[\s\.\'\-]', '', raw_name)
+        if len(alpha_only) < 2:
+            continue
+
+        # Reject lines that are ALL numbers or look like page markers
+        if re.match(r'^[\d\s\.]+$', raw_name):
+            continue
+
+        counts[raw_name] = counts.get(raw_name, 0) + 1
+
+    return counts
+
+
+@api_router.post("/projects/{project_id}/detect-characters")
+async def detect_characters(project_id: str):
+    """Detect all characters from confirmed documents in a project.
+    ONLY reads from confirmed cleaned_text. No fallback. No exceptions."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    # Only confirmed documents
+    docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    if not docs:
+        raise HTTPException(
+            status_code=400,
+            detail="No confirmed documents. Confirm your documents before detecting characters.",
+        )
+
+    # Aggregate character counts across all confirmed docs
+    total_counts = {}
+    for doc in docs:
+        cleaned = doc.get("cleaned_text", "")
+        if not cleaned:
+            continue
+        doc_counts = detect_characters_from_text(cleaned)
+        for name, count in doc_counts.items():
+            total_counts[name] = total_counts.get(name, 0) + count
+
+    # Sort by frequency descending
+    ranked = sorted(total_counts.items(), key=lambda x: x[1], reverse=True)
+
+    characters = [
+        {"name": name, "line_count": count}
+        for name, count in ranked
+    ]
+
+    logger.info(f"[DETECT] Found {len(characters)} characters in project {project_id[:12]} from {len(docs)} confirmed docs")
+
+    return {
+        "project_id": project_id,
+        "characters": characters,
+        "confirmed_doc_count": len(docs),
+    }
+
+
+
 
 
 # --- Endpoints ---

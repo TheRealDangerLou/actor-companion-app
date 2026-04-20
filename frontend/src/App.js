@@ -8,11 +8,12 @@ import ProjectHome from "@/components/ProjectHome";
 import ProjectCreate from "@/components/ProjectCreate";
 import DocumentUpload from "@/components/DocumentUpload";
 import DocumentReview from "@/components/DocumentReview";
+import CharacterSelect from "@/components/CharacterSelect";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function App() {
-  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review"
+  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review" | "characters"
   const [createMode, setCreateMode] = useState("audition");
   const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -34,15 +35,16 @@ function App() {
       const resp = await axios.get(`${API}/projects/${projectId}`);
       const proj = resp.data;
       setActiveProject(proj);
-      // If all docs are confirmed, go to review (future: prep dashboard)
-      // If has docs but not confirmed, go to review
-      // If no docs, go to upload
       const docs = proj.documents || [];
       if (docs.length === 0) {
         setView("project");
       } else {
         const allConfirmed = docs.every((d) => d.is_confirmed);
-        setView(allConfirmed ? "review" : "project");
+        if (!allConfirmed) {
+          setView("project");
+        } else {
+          setView("characters");
+        }
       }
     } catch {
       toast.error("Could not open project.");
@@ -58,8 +60,11 @@ function App() {
   }, []);
 
   const handleAllConfirmed = useCallback(() => {
-    // Feature #5+ will add character detection here
-    toast.success("All documents confirmed. Character selection coming next.");
+    setView("characters");
+  }, []);
+
+  const handleCharacterSelected = useCallback((name) => {
+    setActiveProject((prev) => prev ? { ...prev, selected_character: name } : prev);
     setView("home");
   }, []);
 
@@ -112,6 +117,16 @@ function App() {
                 project={activeProject}
                 onAllConfirmed={handleAllConfirmed}
                 onBack={() => setView("project")}
+              />
+            </motion.div>
+          )}
+
+          {!loading && view === "characters" && activeProject && (
+            <motion.div key="characters" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <CharacterSelect
+                project={activeProject}
+                onCharacterSelected={handleCharacterSelected}
+                onBack={() => setView("review")}
               />
             </motion.div>
           )}
