@@ -34,7 +34,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | 2 | Multi-document upload + OCR extraction | COMPLETE (29/29 tests) | No |
 | 3 | Deterministic document classification + manual override | COMPLETE (33/33 tests) | No |
 | 4 | Script cleaning + review/edit/confirm | COMPLETE (14/14 backend + full frontend flow) | No |
-| 5 | Character detection + selection | NOT STARTED | No |
+| 5 | Character detection + selection | COMPLETE (8/8 backend + full frontend flow) | No |
 | 6 | Line extraction + cue pair generation | NOT STARTED (reuse existing extract_character_lines) | No |
 | 7 | Prep Dashboard basics (At-a-Glance, Scenes/My Lines) | NOT STARTED | No |
 | 8 | Read-Through | NOT STARTED | No |
@@ -71,6 +71,8 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - `POST /api/documents/{id}/confirm` — confirm cleaned text (source of truth)
 - `POST /api/projects/{id}/confirm-all` — batch confirm all docs
 
+- `POST /api/projects/{id}/detect-characters` — scan confirmed docs for characters (ranked by frequency)
+
 ## Implementation Rules
 - One feature at a time
 - Each feature validated end-to-end before next
@@ -83,3 +85,4 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - Feature #2 (Document Upload): /app/test_reports/iteration_26.json — 29/29 passed
 - Feature #3 (Classification): /app/test_reports/iteration_27.json — 33/33 passed
 - Feature #4 (Clean/Review/Confirm): /app/test_reports/iteration_28.json — 14/14 backend + full frontend flow
+- Feature #5 (Character Detection): /app/test_reports/iteration_29.json — 8/8 backend + full frontend flow
