@@ -927,6 +927,101 @@ async def analyze_with_gpt(text=None, image_base64=None, context=None, mode="qui
         raise Exception(f"STAGE:gpt_parse | Could not parse JSON from GPT response (first 300 chars): {response[:300]}")
 
 
+
+# ============================================================
+# PROJECT CRUD (Phase 1 — Audition-First MVP)
+# ============================================================
+
+class CreateProjectRequest(BaseModel):
+    title: str
+    role_name: Optional[str] = ""
+    mode: str = "audition"  # "audition" | "booked"
+    audition_date: Optional[str] = None
+    audition_time: Optional[str] = None
+    audition_format: Optional[str] = None  # "self-tape" | "in-person" | null
+
+
+class UpdateProjectRequest(BaseModel):
+    title: Optional[str] = None
+    role_name: Optional[str] = None
+    mode: Optional[str] = None
+    audition_date: Optional[str] = None
+    audition_time: Optional[str] = None
+    audition_format: Optional[str] = None
+    selected_character: Optional[str] = None
+
+
+@api_router.post("/projects")
+async def create_project(request: CreateProjectRequest):
+    project = {
+        "id": str(uuid.uuid4()),
+        "title": request.title.strip(),
+        "role_name": (request.role_name or "").strip(),
+        "mode": request.mode,
+        "selected_character": None,
+        "audition_date": request.audition_date,
+        "audition_time": request.audition_time,
+        "audition_format": request.audition_format,
+        "document_ids": [],
+        "prep_output": None,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    await db.projects.insert_one(project)
+    project.pop("_id", None)
+    return project
+
+
+@api_router.get("/projects")
+async def list_projects():
+    cursor = db.projects.find({}, {"_id": 0}).sort("updated_at", -1)
+    projects = await cursor.to_list(length=100)
+    # Add document count for each project
+    for p in projects:
+        p["document_count"] = await db.documents.count_documents({"project_id": p["id"]})
+    return projects
+
+
+@api_router.get("/projects/{project_id}")
+async def get_project(project_id: str):
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    # Include documents
+    docs = await db.documents.find({"project_id": project_id}, {"_id": 0}).to_list(length=50)
+    project["documents"] = docs
+    return project
+
+
+@api_router.put("/projects/{project_id}")
+async def update_project(project_id: str, request: UpdateProjectRequest):
+    updates = {}
+    for field in ["title", "role_name", "mode", "audition_date", "audition_time", "audition_format", "selected_character"]:
+        val = getattr(request, field, None)
+        if val is not None:
+            updates[field] = val.strip() if isinstance(val, str) else val
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+    updates["updated_at"] = datetime.now(timezone.utc).isoformat()
+    result = await db.projects.update_one({"id": project_id}, {"$set": updates})
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Project not found")
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    return project
+
+
+@api_router.delete("/projects/{project_id}")
+async def delete_project(project_id: str):
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    # Delete associated documents
+    await db.documents.delete_many({"project_id": project_id})
+    await db.projects.delete_one({"id": project_id})
+    return {"status": "deleted", "project_id": project_id}
+
+
+
 # --- Endpoints ---
 @api_router.get("/")
 async def root():

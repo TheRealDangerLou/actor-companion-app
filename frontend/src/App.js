@@ -5,6 +5,8 @@ import { BrowserRouter, Routes, Route, useParams } from "react-router-dom";
 import { Toaster, toast } from "sonner";
 import { AnimatePresence, motion } from "framer-motion";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import ProjectHome from "@/components/ProjectHome";
+import ProjectCreate from "@/components/ProjectCreate";
 import UploadPage from "@/components/UploadPage";
 import BreakdownView from "@/components/BreakdownView";
 import MemorizationMode from "@/components/MemorizationMode";
@@ -18,7 +20,9 @@ import ParseAudit from "@/components/ParseAudit";
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function MainApp() {
-  const [view, setView] = useState("upload"); // "upload" | "breakdown" | "script" | "review"
+  const [view, setView] = useState("home"); // "home" | "create" | "upload" | "breakdown" | "script" | "review"
+  const [createMode, setCreateMode] = useState("audition");
+  const [activeProjectId, setActiveProjectId] = useState(null);
   const [breakdown, setBreakdown] = useState(null);
   const [scriptData, setScriptData] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -149,10 +153,31 @@ function MainApp() {
   }, [breakdown, handleAnalyze]);
 
   const handleNewAnalysis = useCallback(() => {
-    setView("upload");
+    setView("home");
     setBreakdown(null);
     setScriptData(null);
     setActiveScriptBreakdown(null);
+  }, []);
+
+  // --- Project flow handlers ---
+  const handleCreateProject = useCallback((mode) => {
+    setCreateMode(mode);
+    setView("create");
+  }, []);
+
+  const handleProjectCreated = useCallback((project) => {
+    setActiveProjectId(project.id);
+    // After creation, go to upload flow for this project (will be Feature #2)
+    // For now, return to home to see the new project
+    setView("home");
+  }, []);
+
+  const handleOpenProject = useCallback((projectId) => {
+    setActiveProjectId(projectId);
+    // For now, just store the active project. Feature #2 will add the upload/doc flow.
+    // Once there are documents, this will open the prep dashboard.
+    setView("home");
+    toast.info("Project opened. Document upload coming in Feature #2.");
   }, []);
 
   const [sceneProgress, setSceneProgress] = useState(null); // {current, total, heading}
@@ -414,6 +439,16 @@ function MainApp() {
         {loading && (
           <motion.div key="loading" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
             <LoadingScreen mode={loadingMode} sceneProgress={sceneProgress} />
+          </motion.div>
+        )}
+        {!loading && view === "home" && (
+          <motion.div key="home" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            <ProjectHome onOpenProject={handleOpenProject} onCreateProject={handleCreateProject} />
+          </motion.div>
+        )}
+        {!loading && view === "create" && (
+          <motion.div key="create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
+            <ProjectCreate mode={createMode} onCreated={handleProjectCreated} onBack={() => setView("home")} />
           </motion.div>
         )}
         {!loading && view === "upload" && (
