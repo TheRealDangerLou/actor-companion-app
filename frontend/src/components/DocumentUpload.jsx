@@ -34,7 +34,7 @@ export default function DocumentUpload({ project, onDocumentsChanged, onBack }) 
   const [uploading, setUploading] = useState(false);
   const [showPasteInput, setShowPasteInput] = useState(false);
   const [pastedText, setPastedText] = useState("");
-  const [pasteType, setPasteType] = useState("sides");
+  const [pasteType, setPasteType] = useState("unknown");
   const fileInputRef = useRef(null);
   const cameraInputRef = useRef(null);
 
@@ -93,6 +93,7 @@ export default function DocumentUpload({ project, onDocumentsChanged, onBack }) 
       setDocuments(updated);
       onDocumentsChanged?.(updated);
       setPastedText("");
+      setPasteType("unknown");
       setShowPasteInput(false);
       toast.success("Text saved as document.");
     } catch (err) {
@@ -296,6 +297,9 @@ export default function DocumentUpload({ project, onDocumentsChanged, onBack }) 
                     <p className="text-[11px] text-zinc-600 mt-0.5">
                       {doc.char_count?.toLocaleString() || "?"} chars
                       {doc.extraction_method ? ` · ${doc.extraction_method}` : ""}
+                      {doc.suggested_type && doc.suggested_type !== "unknown" && doc.type === doc.suggested_type
+                        ? " · auto-detected"
+                        : ""}
                     </p>
                     {/* Type selector */}
                     <div className="flex flex-wrap gap-1.5 mt-2">

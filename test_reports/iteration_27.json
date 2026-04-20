@@ -1,0 +1,121 @@
+{
+  "summary": "Completed testing of Feature #3: Deterministic document classification with manual override. All 21 backend tests passed. All 12 frontend UI tests passed. classify_document() correctly classifies sides, instructions, and wardrobe content. Mixed/uncertain docs default to 'unknown'. Upload endpoint auto-classifies when doc_type='unknown' and stores suggested_type field. Manual type override via PUT /api/documents/{id}/type works correctly. Frontend shows 'auto-detected' label when type matches suggested_type (except for 'unknown'). 1-tap type badge override changes type immediately.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "passed_tests": [
+    "classify_document() - sides with INT./EXT. scene headings returns 'sides' - PASS",
+    "classify_document() - sides with ALL CAPS dialogue pattern returns 'sides' - PASS",
+    "classify_document() - sides with EPISODE/SCENE/ACT markers returns 'sides' - PASS",
+    "classify_document() - instructions with self-tape/deadline/slate keywords returns 'instructions' - PASS",
+    "classify_document() - instructions with audition/callback/casting keywords returns 'instructions' - PASS",
+    "classify_document() - wardrobe with costume/wear/logos keywords returns 'wardrobe' - PASS",
+    "classify_document() - wardrobe with clothing/accessories keywords returns 'wardrobe' - PASS",
+    "classify_document() - mixed signals handled correctly (returns 'unknown' or dominant type) - PASS",
+    "classify_document() - short text returns 'unknown' - PASS",
+    "classify_document() - empty text returns 'unknown' - PASS",
+    "classify_document() - generic text returns 'unknown' - PASS",
+    "classify_document() - weak signals (score < 3) returns 'unknown' - PASS",
+    "Upload with doc_type='unknown' auto-classifies sides content - PASS",
+    "Upload with doc_type='unknown' auto-classifies instructions content - PASS",
+    "Upload with doc_type='unknown' auto-classifies wardrobe content - PASS",
+    "Upload stores suggested_type field alongside type - PASS",
+    "Upload with explicit type skips auto-classify - PASS",
+    "PUT /api/documents/{id}/type - manual override changes type - PASS",
+    "PUT /api/documents/{id}/type - manual override preserves suggested_type - PASS",
+    "PUT /api/documents/{id}/type - all valid types work - PASS",
+    "PUT /api/documents/{id}/type - invalid type returns 400 - PASS",
+    "Frontend: Paste type dropdown defaults to 'unknown' - PASS",
+    "Frontend: Sides content auto-classified and shows 'auto-detected' label - PASS",
+    "Frontend: Instructions content auto-classified and shows 'auto-detected' label - PASS",
+    "Frontend: Wardrobe content auto-classified and shows 'auto-detected' label - PASS",
+    "Frontend: 'unknown' type does NOT show 'auto-detected' label - PASS",
+    "Frontend: 1-tap type badge override changes type immediately - PASS",
+    "Frontend: Manual override removes 'auto-detected' label (type !== suggested_type) - PASS",
+    "Frontend: Document cards show correct type badges - PASS",
+    "Frontend: Mobile viewport (390x844) layout correct - PASS"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_document_classification.py",
+    "/app/test_reports/pytest/document_classification_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "classify_document() function (server.py lines 1039-1105) uses scoring system with clear thresholds",
+    "Sides signals: INT./EXT. headings (+3), ALL CAPS names (+1), EPISODE/SCENE/ACT markers (+2), dialogue pattern (+1)",
+    "Instructions signals: self-tape, deadline, slate, callback, audition, casting keywords (+2 each occurrence)",
+    "Wardrobe signals: wardrobe, costume, wear, logos, clothing keywords (+3 each occurrence)",
+    "Mixed signal detection: if top two scores ratio > 0.5, returns 'unknown'",
+    "Threshold: max_score < 3 returns 'unknown'",
+    "Upload endpoint (line 1243) calls classify_document() when doc_type=='unknown'",
+    "suggested_type field stored alongside type (line 1250)",
+    "Frontend DocumentUpload.jsx correctly shows 'auto-detected' when type===suggested_type && suggested_type!=='unknown' (line 300-302)"
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_document_classification.py"
+  ],
+  "success_rate": {
+    "backend": "100% (21/21 tests passed)",
+    "frontend": "100% (12/12 UI tests passed)"
+  },
+  "seed_data_creation": "Test projects created with TEST_ prefix and cleaned up after tests",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Document classification (Feature #3) fully tested. Key function: classify_document() in server.py. Scoring: sides (scene headings, dialogue), instructions (self-tape, deadline, slate), wardrobe (costume, wear, logos). Mixed signals or weak scores return 'unknown'. Upload auto-classifies when doc_type='unknown'. Frontend shows 'auto-detected' label when type===suggested_type and suggested_type!=='unknown'. 1-tap type badges allow manual override. Data-testid: paste-type-select (defaults to 'unknown'), doc-type-{id}-{type} for type badges.",
+  "features_verified": {
+    "classify_sides": {
+      "status": "WORKING",
+      "details": "INT./EXT. headings, ALL CAPS names, EPISODE/SCENE/ACT markers correctly classified as 'sides'"
+    },
+    "classify_instructions": {
+      "status": "WORKING",
+      "details": "self-tape, deadline, slate, callback, audition, casting keywords correctly classified as 'instructions'"
+    },
+    "classify_wardrobe": {
+      "status": "WORKING",
+      "details": "wardrobe, costume, wear, logos, clothing keywords correctly classified as 'wardrobe'"
+    },
+    "classify_unknown_mixed": {
+      "status": "WORKING",
+      "details": "Mixed signals (ratio > 0.5) correctly return 'unknown'"
+    },
+    "classify_unknown_short": {
+      "status": "WORKING",
+      "details": "Short/empty/generic text correctly returns 'unknown'"
+    },
+    "upload_auto_classify": {
+      "status": "WORKING",
+      "details": "Upload with doc_type='unknown' triggers auto-classification"
+    },
+    "suggested_type_field": {
+      "status": "WORKING",
+      "details": "suggested_type field stored alongside type on upload"
+    },
+    "manual_type_override": {
+      "status": "WORKING",
+      "details": "PUT /api/documents/{id}/type changes type, preserves suggested_type"
+    },
+    "paste_type_default": {
+      "status": "WORKING",
+      "details": "Paste type dropdown defaults to 'unknown' (triggers auto-classify)"
+    },
+    "auto_detected_label": {
+      "status": "WORKING",
+      "details": "Shows when type===suggested_type and suggested_type!=='unknown'"
+    },
+    "no_auto_detected_for_unknown": {
+      "status": "WORKING",
+      "details": "'unknown' type does NOT show 'auto-detected' label"
+    },
+    "one_tap_type_override": {
+      "status": "WORKING",
+      "details": "Clicking type badge changes type immediately"
+    }
+  }
+}

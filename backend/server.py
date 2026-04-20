@@ -1036,6 +1036,75 @@ UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 
+def classify_document(text: str) -> str:
+    """Deterministic document classification based on content signals.
+    Returns a suggested type. Defaults to 'unknown' if mixed or uncertain."""
+    if not text or len(text) < 10:
+        return "unknown"
+
+    text_lower = text.lower()
+    lines = text.split("\n")
+    non_blank = [l.strip() for l in lines if l.strip()]
+
+    # --- Score each category ---
+    scores = {"sides": 0, "instructions": 0, "wardrobe": 0, "notes": 0}
+
+    # SIDES signals: scene headings, ALL CAPS character names followed by dialogue
+    for line in non_blank[:80]:  # check first 80 non-blank lines
+        s = line.strip()
+        if re.match(r'^(INT\.|EXT\.|INT/EXT\.)', s, re.IGNORECASE):
+            scores["sides"] += 3
+        if re.match(r'^[A-Z][A-Z\s\.\'\-]{1,30}(?:\s*\(.*?\))?\s*$', s) and len(s) < 40:
+            scores["sides"] += 1
+        if re.match(r'^EPISODE\s|^EP[\.\s]\d|^SCENE\s|^ACT\s', s, re.IGNORECASE):
+            scores["sides"] += 2
+
+    # Dialogue pattern: CAPS line followed by lowercase line
+    for i in range(min(len(non_blank) - 1, 60)):
+        if re.match(r'^[A-Z]{2,}', non_blank[i]) and non_blank[i + 1] and non_blank[i + 1][0].islower():
+            scores["sides"] += 1
+
+    # INSTRUCTIONS signals
+    instruction_terms = [
+        "self-tape", "selftape", "self tape", "callback", "deadline", "submit",
+        "slate", "reader", "framing", "eyeline", "camera", "audition",
+        "sides attached", "please prepare", "send to", "upload to",
+        "casting", "role of", "breakdown", "please note", "important:",
+        "format:", "requirements:", "instructions:", "due by", "by end of day",
+    ]
+    for term in instruction_terms:
+        count = text_lower.count(term)
+        scores["instructions"] += count * 2
+
+    # WARDROBE signals
+    wardrobe_terms = [
+        "wardrobe", "costume", "outfit", "wear", "clothing",
+        "no logos", "solid colors", "avoid patterns", "dress as",
+        "hair and makeup", "hairstyle", "jewelry", "accessories",
+    ]
+    for term in wardrobe_terms:
+        count = text_lower.count(term)
+        scores["wardrobe"] += count * 3
+
+    # --- Decision logic ---
+    max_score = max(scores.values())
+
+    # If nothing scores above threshold, it's unknown
+    if max_score < 3:
+        return "unknown"
+
+    # Check for mixed signals: if top two are close, default to unknown
+    sorted_scores = sorted(scores.values(), reverse=True)
+    if sorted_scores[0] > 0 and sorted_scores[1] > 0:
+        ratio = sorted_scores[1] / sorted_scores[0]
+        if ratio > 0.5:
+            return "unknown"
+
+    # Return the highest scorer
+    winner = max(scores, key=scores.get)
+    return winner
+
+
 @api_router.post("/projects/{project_id}/documents")
 async def upload_document(
     project_id: str,
@@ -1166,16 +1235,19 @@ async def upload_document(
     if len(original_text) < 5:
         raise HTTPException(status_code=400, detail="Could not extract enough text. Try a clearer file or paste the text manually.")
 
-    # Validate doc_type
+    # Validate doc_type — auto-classify if unknown
     valid_types = {"sides", "instructions", "wardrobe", "notes", "reference", "unknown"}
     if doc_type not in valid_types:
         doc_type = "unknown"
+    if doc_type == "unknown":
+        doc_type = classify_document(original_text)
 
     # Create document record
     doc = {
         "id": doc_id,
         "project_id": project_id,
         "type": doc_type,
+        "suggested_type": doc_type,
         "filename": filename,
         "original_text": original_text,
         "cleaned_text": None,
