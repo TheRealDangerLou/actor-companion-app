@@ -1332,6 +1332,95 @@ async def delete_document(doc_id: str):
 
 
 
+# ============================================================
+# DOCUMENT CLEANING & CONFIRMATION (Phase 1 — Feature #4)
+# ============================================================
+
+@api_router.post("/documents/{doc_id}/clean")
+async def clean_document(doc_id: str):
+    """Run deterministic cleaning on a document. Returns cleaned text for review.
+    Zero GPT, zero credits."""
+    doc = await db.documents.find_one({"id": doc_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    raw = doc.get("original_text", "")
+    cleaned = clean_script_text(raw)
+    return {
+        "doc_id": doc_id,
+        "original_text": raw,
+        "cleaned_text": cleaned,
+        "original_length": len(raw),
+        "cleaned_length": len(cleaned),
+    }
+
+
+@api_router.post("/projects/{project_id}/clean-all")
+async def clean_all_documents(project_id: str):
+    """Clean all documents in a project at once. Returns cleaned texts for review."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    docs = await db.documents.find({"project_id": project_id}, {"_id": 0}).to_list(length=50)
+    results = []
+    for doc in docs:
+        raw = doc.get("original_text", "")
+        cleaned = clean_script_text(raw)
+        results.append({
+            "doc_id": doc["id"],
+            "filename": doc.get("filename", ""),
+            "type": doc.get("type", "unknown"),
+            "original_text": raw,
+            "cleaned_text": doc.get("cleaned_text") or cleaned,
+            "is_confirmed": doc.get("is_confirmed", False),
+        })
+    return {"project_id": project_id, "documents": results}
+
+
+class ConfirmDocumentRequest(BaseModel):
+    cleaned_text: str
+
+
+@api_router.post("/documents/{doc_id}/confirm")
+async def confirm_document(doc_id: str, request: ConfirmDocumentRequest):
+    """Save user-confirmed cleaned text. This becomes the single source of truth."""
+    result = await db.documents.update_one(
+        {"id": doc_id},
+        {"$set": {
+            "cleaned_text": request.cleaned_text,
+            "is_confirmed": True,
+        }},
+    )
+    if result.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Document not found")
+    return {"status": "confirmed", "doc_id": doc_id}
+
+
+@api_router.post("/projects/{project_id}/confirm-all")
+async def confirm_all_documents(project_id: str, request: dict):
+    """Batch confirm all documents in a project.
+    Expects {documents: [{doc_id, cleaned_text}]}"""
+    docs = request.get("documents", [])
+    if not docs:
+        raise HTTPException(status_code=400, detail="No documents provided")
+    confirmed = 0
+    for d in docs:
+        did = d.get("doc_id")
+        ct = d.get("cleaned_text", "")
+        if did and ct:
+            await db.documents.update_one(
+                {"id": did},
+                {"$set": {"cleaned_text": ct, "is_confirmed": True}},
+            )
+            confirmed += 1
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$set": {"updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+    return {"status": "ok", "confirmed": confirmed}
+
+
+
+
 
 # --- Endpoints ---
 @api_router.get("/")

@@ -7,11 +7,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import ProjectHome from "@/components/ProjectHome";
 import ProjectCreate from "@/components/ProjectCreate";
 import DocumentUpload from "@/components/DocumentUpload";
+import DocumentReview from "@/components/DocumentReview";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function App() {
-  const [view, setView] = useState("home"); // "home" | "create" | "project"
+  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review"
   const [createMode, setCreateMode] = useState("audition");
   const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -31,8 +32,18 @@ function App() {
     setLoading(true);
     try {
       const resp = await axios.get(`${API}/projects/${projectId}`);
-      setActiveProject(resp.data);
-      setView("project");
+      const proj = resp.data;
+      setActiveProject(proj);
+      // If all docs are confirmed, go to review (future: prep dashboard)
+      // If has docs but not confirmed, go to review
+      // If no docs, go to upload
+      const docs = proj.documents || [];
+      if (docs.length === 0) {
+        setView("project");
+      } else {
+        const allConfirmed = docs.every((d) => d.is_confirmed);
+        setView(allConfirmed ? "review" : "project");
+      }
     } catch {
       toast.error("Could not open project.");
     }
@@ -42,10 +53,14 @@ function App() {
   const handleDocumentsChanged = useCallback((docs, shouldContinue) => {
     setActiveProject((prev) => prev ? { ...prev, documents: docs } : prev);
     if (shouldContinue) {
-      // Feature #4 will add the review/cleaning flow here
-      toast.success("Documents saved. Review & cleaning coming next.");
-      setView("home");
+      setView("review");
     }
+  }, []);
+
+  const handleAllConfirmed = useCallback(() => {
+    // Feature #5+ will add character detection here
+    toast.success("All documents confirmed. Character selection coming next.");
+    setView("home");
   }, []);
 
   const handleBackToHome = useCallback(() => {
@@ -87,6 +102,16 @@ function App() {
                 project={activeProject}
                 onDocumentsChanged={handleDocumentsChanged}
                 onBack={handleBackToHome}
+              />
+            </motion.div>
+          )}
+
+          {!loading && view === "review" && activeProject && (
+            <motion.div key="review" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <DocumentReview
+                project={activeProject}
+                onAllConfirmed={handleAllConfirmed}
+                onBack={() => setView("project")}
               />
             </motion.div>
           )}

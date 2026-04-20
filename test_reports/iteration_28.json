@@ -1,0 +1,53 @@
+{
+  "summary": "Tested Feature #4: Script Cleaning + Review/Edit/Confirm. Backend: 14/14 pytest tests passed against live API (clean, clean-all, confirm, confirm-all, GET document). Cleaning rules verified: page-number stripping, '20INT.' -> 'INT.', (MORE)/(CONT'D) join, blank-line collapse, blank line before character names. Confirmation persists cleaned_text + is_confirmed=true; clean-all returns the persisted (confirmed) text rather than re-cleaning. Frontend: full mobile flow at 390x844 verified — Home -> New Audition -> Create -> Paste Text (x2) -> Continue -> DocumentReview, with Edit/Preview toggle, Edited badge, Reset (toast 'Reset to auto-cleaned version.'), Confirm This Document (Confirmed badge), Confirm All, and 'Continue — All Confirmed' all working.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "passed_tests": [
+    "POST /api/documents/{id}/clean returns cleaned_text + lengths",
+    "POST /api/documents/{id}/clean strips standalone page-number lines (15./16.)",
+    "POST /api/documents/{id}/clean fixes '20INT.' to 'INT.'",
+    "POST /api/documents/{id}/clean removes (MORE) marker, joins CONT'D",
+    "POST /api/documents/{id}/clean collapses 3+ blank lines",
+    "POST /api/documents/{id}/clean ensures blank line before character name",
+    "POST /api/documents/{id}/clean returns 404 for unknown id",
+    "POST /api/projects/{id}/clean-all returns documents array with required fields",
+    "POST /api/projects/{id}/clean-all returns 404 for unknown project",
+    "POST /api/documents/{id}/confirm persists cleaned_text and is_confirmed=true (verified via GET)",
+    "POST /api/documents/{id}/confirm returns 404 for unknown id",
+    "POST /api/projects/{id}/clean-all returns persisted cleaned_text after confirm (no re-clean)",
+    "POST /api/projects/{id}/confirm-all batch confirms all docs",
+    "POST /api/projects/{id}/confirm-all returns 400 for empty documents array",
+    "Frontend mobile (390x844): Home loads, New Audition flow",
+    "Frontend: Project create + role name fill + Create button works",
+    "Frontend: DocumentUpload paste-text flow uploads document",
+    "Frontend: Continue navigates to DocumentReview",
+    "Frontend: review-preview shows cleaned text (no '20INT.', no '(MORE)', no '15.' lines)",
+    "Frontend: Edit toggle reveals review-textarea",
+    "Frontend: Edited badge appears on text change",
+    "Frontend: Reset reverts text to auto-cleaned version",
+    "Frontend: Toggle back to Preview works",
+    "Frontend: Confirm This Document shows Confirmed badge",
+    "Frontend: Confirm All works for batch",
+    "Frontend: 'Continue — All Confirmed' appears once all confirmed",
+    "Frontend: All controls usable at 390px viewport"
+  ],
+  "test_report_links": [
+    "/app/backend/tests/test_doc_clean_confirm.py",
+    "/app/test_reports/pytest/doc_clean_confirm_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is ~2920 lines — consider splitting into routers (projects, documents, cleaning, scripts) per the >700 line guideline.",
+    "POST /api/projects/{id}/confirm-all uses request: dict (untyped). Pydantic model would give validation + OpenAPI docs (matches the ConfirmDocumentRequest pattern used for /confirm).",
+    "clean_all endpoint re-runs clean_script_text() on every doc on every call even when is_confirmed=True. Optimization: skip cleaning when doc has stored cleaned_text (tiny, but matches the contract that confirmed text is the source of truth).",
+    "Confirm-all silently ignores docs missing 'cleaned_text' (truthy check on ct). Empty-string is allowed only via doc-level confirm. Consider explicit response with skipped count for transparency.",
+    "DocumentReview transient overlay: just-uploaded toast can intercept clicks on toggle-edit-btn briefly — first run failed because of this. Consider auto-dismiss faster or pointer-events:none on toast container so e2e is more deterministic."
+  ],
+  "updated_files": ["/app/backend/tests/test_doc_clean_confirm.py"],
+  "success_rate": {"backend": "100% (14/14)", "frontend": "100% (all critical flows)"},
+  "test_credentials": "N/A (no auth)",
+  "seed_data_creation": "TEST_clean_* and TEST_edit_* projects created via API/UI. Backend test cleans up its project; UI test projects remain (small, with only pasted text).",
+  "retest_needed": false,
+  "should_main_agent_self_test": false,
+  "context_for_next_testing_agent": "Feature #4 fully verified. Endpoints: /api/documents/{id}/clean, /api/projects/{id}/clean-all, /api/documents/{id}/confirm (body {cleaned_text}), /api/projects/{id}/confirm-all (body {documents:[{doc_id, cleaned_text}]}). Frontend testids: paste-submit-btn, continue-btn, document-review, toggle-edit-btn, review-textarea, review-preview, confirm-doc-btn, confirm-all-btn, reset-btn, confirmed-badge, edited-badge. Note: just-uploaded sonner toast can transiently overlay buttons on review screen — wait ~2s after second upload before clicking Continue/Edit if writing UI tests."
+}
