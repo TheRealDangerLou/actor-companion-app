@@ -100,9 +100,11 @@ export default function ProjectHome({ onOpenProject, onCreateProject }) {
                 exit={{ opacity: 0, x: -100 }}
                 transition={{ duration: 0.2 }}
               >
-                <button
+                <div
                   onClick={() => onOpenProject(project.id)}
-                  className="w-full text-left bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-4 hover:bg-zinc-800/40 transition-colors group"
+                  role="button"
+                  tabIndex={0}
+                  className="w-full text-left bg-zinc-900/60 border border-zinc-800/60 rounded-xl p-4 hover:bg-zinc-800/40 transition-colors group cursor-pointer"
                   data-testid={`project-card-${project.id}`}
                 >
                   <div className="flex items-start justify-between">
@@ -145,7 +147,7 @@ export default function ProjectHome({ onOpenProject, onCreateProject }) {
                       <ChevronRight className="w-4 h-4 text-zinc-600 group-hover:text-zinc-400 transition-colors" />
                     </div>
                   </div>
-                </button>
+                </div>
               </motion.div>
             ))}
           </AnimatePresence>

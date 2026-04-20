@@ -31,7 +31,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | # | Feature | Status | GPT? |
 |---|---------|--------|------|
 | 1 | Project CRUD | COMPLETE (19/19 tests) | No |
-| 2 | Multi-document upload + OCR extraction | NOT STARTED | No |
+| 2 | Multi-document upload + OCR extraction | COMPLETE (29/29 tests) | No |
 | 3 | Deterministic document classification + manual override | NOT STARTED | No |
 | 4 | Script cleaning + review/edit/confirm | NOT STARTED (reuse existing clean_script_text) | No |
 | 5 | Character detection + selection | NOT STARTED | No |
@@ -57,10 +57,15 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 
 ## Key API Endpoints (Phase 1)
 - `POST /api/projects` — create project
-- `GET /api/projects` — list projects
+- `GET /api/projects` — list projects (includes document_count)
 - `GET /api/projects/{id}` — get project with documents
 - `PUT /api/projects/{id}` — update project
 - `DELETE /api/projects/{id}` — delete project + documents
+- `POST /api/projects/{id}/documents` — upload file or paste text
+- `GET /api/projects/{id}/documents` — list documents (excludes text for performance)
+- `GET /api/documents/{id}` — get single document with full text
+- `PUT /api/documents/{id}/type` — change document type
+- `DELETE /api/documents/{id}` — delete document
 
 ## Implementation Rules
 - One feature at a time
@@ -71,3 +76,4 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 
 ## Test Reports
 - Feature #1 (Project CRUD): /app/test_reports/iteration_25.json — 19/19 passed
+- Feature #2 (Document Upload): /app/test_reports/iteration_26.json — 29/29 passed
