@@ -1,0 +1,46 @@
+{
+  "summary": "Feature #6 (Line Extraction + Rehearsal Mode) fully tested. Backend: 9/9 pytest passing (extract-lines endpoint — 404 unknown project, 400 no char, 400 no confirmed docs, multi-scene grouping with INT./EXT. headers, cue pairing with (Scene start) for first line, single-scene 'Full Script' fallback, multi-document combine, full_text field returned). Frontend: 14/15 scenarios verified on Demo Script @ 390px mobile (PrepView loads, READ mode with 3 scenes + 6 highlighted amber lines + cue/speaker, collapse/expand works, REHEARSE mode with cue-card + hidden-line + tap-to-reveal + progress bar 16.67%→100%, Run Again restart works, mode toggle works, Change character navigates to character-select). One real UI bug: rehearse-skip-btn (bottom-right of fixed nav) is OCCLUDED by the Emergent badge ('Made with Emergent' link with id='emergent-badge') — Playwright reports 'subtree intercepts pointer events' and click fails. On real mobile devices at 390px, users cannot click the skip (>) button to advance without revealing.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "PrepView / RehearseMode bottom nav",
+        "issue": "rehearse-skip-btn at bottom-right (x=324,y=780 at 390px viewport) is occluded by #emergent-badge ('Made with Emergent' link). Pointer events are intercepted, click handler never fires → progress bar stays put. Affects all mobile users. Fix: increase bottom-padding on the fixed nav (e.g. pb-[72px] on the main container and/or pb-6 on the nav), or move the skip button out of the emergent badge collision zone, or add right padding so the skip btn sits further left.",
+        "selector": "[data-testid=\"rehearse-skip-btn\"]",
+        "priority": "HIGH"
+      }
+    ],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "PrepView rehearse mode", "issues": ["Skip button (>) sits directly under the persistent Emergent badge on mobile — unreachable. Consider keeping the navigation controls (reveal/next/prev) as the primary path and either removing skip or relocating it."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_line_extraction.py",
+    "/app/test_reports/pytest/line_extraction_results.xml"
+  ],
+  "action_items": [
+    "Fix overlay collision between rehearse-skip-btn and #emergent-badge at 390px. Easiest fix: add right-padding/margin to the bottom nav or reduce skip-btn right position; alternatively the skip-btn is a duplicate of rehearse-next-btn (both call handleNext) so it could be removed to reduce clutter.",
+    "Optional: relax rehearse-skip-btn `disabled` so at the last line it becomes a complete button as well (currently skip is disabled at end but next-btn transforms into complete-btn — inconsistent)."
+  ],
+  "critical_code_review_comments": [
+    "PrepView.jsx: rehearse-skip-btn duplicates rehearse-next-btn (both onClick={handleNext}). Consider removing the skip variant — it adds no function beyond the primary reveal→next flow and creates the overlay collision.",
+    "Backend extract-lines correctly excludes MongoDB _id via projection {\"_id\": 0} and uses deterministic regex parsing (zero GPT calls as specified).",
+    "First-line cue logic is correct: when character speaks first in the entire script, cue_text='(Scene start)' and cue_speaker=''. Verified in test_first_line_cue_when_character_speaks_first.",
+    "Fallback from 'sides' typed docs to any confirmed docs is sensible. However if 'sides' filter matches some docs, non-'sides' confirmed docs are silently ignored — might surprise users who confirm mixed doc types. Consider combining all confirmed docs regardless of type, or documenting the 'sides-first' precedence.",
+    "extract_dialogue_blocks is_char_name regex `^([A-Z][A-Z\\s\\.\\'\\-]+?)(?:\\s*\\(.*?\\))?\\s*$` is stricter than the character detection regex elsewhere — minor inconsistency that could cause a line to be classified as dialogue-worthy in character selection but skipped here (low risk for typical scripts)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_line_extraction.py (new — 9 test cases)"
+  ],
+  "success_rate": {"backend": "100% (9/9 pytest)", "frontend": "93% (14/15 scenarios; skip-btn overlay issue)"},
+  "test_credentials": "N/A — no auth",
+  "seed_data_creation": "Created TEST_NoChar, TEST_NoConfirm, TEST_MultiScene, TEST_FirstLine, TEST_SingleScene, TEST_MultiDoc, TEST_FullText projects via API during pytest — all deleted in fixture teardown. Used existing Demo Script (id=017a5a4f-9d91-4c92-9012-47d1c854d8e9, char=SARAH, 1 confirmed doc) for UI testing.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend extract-lines is fully working; run /app/backend/tests/test_line_extraction.py for regression. Use Demo Script (id=017a5a4f-9d91-4c92-9012-47d1c854d8e9) for UI testing — SARAH → 6 lines across 3 scenes (LIVING ROOM, KITCHEN, HALLWAY). The only remaining bug is the skip-btn/Emergent-badge overlay. Test at 390px viewport. Key testids confirmed working: prep-view, prep-back-btn, prep-change-char, mode-read-btn, mode-rehearse-btn, read-mode, rehearse-mode, scene-{1..3}, scene-heading-{1..3}, line-pair-{scene}-{idx}, my-line-{scene}-{idx}, cue-card, cue-text, line-card, hidden-line, revealed-line, rehearse-reveal-btn, rehearse-next-btn, rehearse-prev-btn, rehearse-progress, rehearse-complete-btn, rehearse-restart-btn. rehearse-skip-btn exists but is occluded at 390px.",
+  "rca of the issue": "RCA for skip-btn bug: The rehearse bottom nav is positioned `fixed bottom-0 left-0 right-0`. The rehearse-skip-btn is the last button (right-aligned) with width~50px at x=324. The Emergent preview inserts a persistent anchor `<a id='emergent-badge'>` with 'Made with Emergent' in the bottom-right corner. On 390px wide viewports, this badge overlaps the skip button area. Playwright confirms: 'element <p>Made with Emergent</p> ... subtree intercepts pointer events'. Reproduction: open Demo Script → click Rehearse tab → click skip button (>) — progress bar does not advance; progress remains 16.67%. Mitigation: (a) remove skip-btn (it duplicates next-btn behaviour); or (b) add right padding to the bottom nav's inner container (e.g. `pr-16 md:pr-0`) so skip-btn is left of the badge; or (c) shift the nav up (`pb-14`) so it's above the badge. Option (a) is cleanest since skip duplicates handleNext exactly."
+}

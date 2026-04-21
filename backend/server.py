@@ -1534,6 +1534,210 @@ async def detect_characters(project_id: str):
     }
 
 
+# ============================================================
+# LINE EXTRACTION + REHEARSAL (Phase 1 — Feature #6)
+# ============================================================
+
+def extract_dialogue_blocks(text: str) -> list:
+    """Extract all dialogue blocks from script text.
+    Returns [{speaker, text, line_idx}] in script order.
+    Deterministic. Zero GPT."""
+    if not text:
+        return []
+
+    lines = text.split("\n")
+    blocks = []
+
+    skip_prefixes = (
+        "INT.", "EXT.", "INT/EXT.", "I/E.",
+        "FADE", "CUT TO", "CUT.", "DISSOLVE",
+        "SCENE", "ACT ", "END ", "CONTINUED",
+        "THE END", "EPISODE", "EP.", "EP ",
+        "CHAPTER", "TITLE", "CREDITS",
+    )
+
+    def is_char_name(s):
+        s = s.strip()
+        if not s or len(s) > 60 or len(s) < 2:
+            return False
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
+        if not m:
+            return False
+        name = m.group(1).strip()
+        if any(name.startswith(p) for p in skip_prefixes):
+            return False
+        alpha = re.sub(r'[\s\.\'\-]', '', name)
+        return len(alpha) >= 2
+
+    def get_name(s):
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s.strip())
+        return m.group(1).strip() if m else s.strip()
+
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if is_char_name(stripped):
+            speaker = get_name(stripped)
+            dialogue = []
+            i += 1
+            while i < len(lines):
+                dl = lines[i].strip()
+                if not dl:
+                    # Blank line: peek ahead
+                    peek = i + 1
+                    while peek < len(lines) and not lines[peek].strip():
+                        peek += 1
+                    if peek < len(lines):
+                        nxt = lines[peek].strip()
+                        if is_char_name(nxt):
+                            break
+                        if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO)', nxt, re.IGNORECASE):
+                            break
+                    break
+                if is_char_name(dl):
+                    break
+                if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO)', dl, re.IGNORECASE):
+                    break
+                if re.match(r'^\(.*\)$', dl):
+                    i += 1
+                    continue
+                dialogue.append(dl)
+                i += 1
+            if dialogue:
+                blocks.append({
+                    "speaker": speaker,
+                    "text": " ".join(dialogue),
+                    "line_idx": i,
+                })
+        else:
+            i += 1
+
+    return blocks
+
+
+def build_cue_line_pairs(text: str, character_name: str) -> list:
+    """Build ordered cue/line pairs for a character from script text.
+    Each pair: {cue_speaker, cue_text, line_text, block_index}.
+    Cue = last dialogue from a different speaker before this character speaks."""
+    char_upper = character_name.strip().upper()
+    blocks = extract_dialogue_blocks(text)
+    pairs = []
+
+    for idx, block in enumerate(blocks):
+        speaker_upper = block["speaker"].upper()
+        if speaker_upper != char_upper and char_upper not in speaker_upper:
+            continue
+
+        # Find the cue: last block from a different speaker
+        cue_speaker = ""
+        cue_text = "(Scene start)"
+        for j in range(idx - 1, -1, -1):
+            prev_upper = blocks[j]["speaker"].upper()
+            if prev_upper != char_upper and char_upper not in prev_upper:
+                cue_speaker = blocks[j]["speaker"]
+                cue_text = blocks[j]["text"]
+                break
+
+        pairs.append({
+            "cue_speaker": cue_speaker,
+            "cue_text": cue_text,
+            "line_text": block["text"],
+            "block_index": idx,
+        })
+
+    return pairs
+
+
+@api_router.post("/projects/{project_id}/extract-lines")
+async def extract_lines(project_id: str):
+    """Extract lines + cue pairs for the selected character, grouped by scene.
+    Reads ONLY from confirmed cleaned_text. Deterministic. Zero GPT."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    character = project.get("selected_character")
+    if not character:
+        raise HTTPException(status_code=400, detail="No character selected. Select a character first.")
+
+    # Get confirmed side documents only
+    docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True, "type": "sides"},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    if not docs:
+        # Fallback: try all confirmed docs if no "sides" typed docs
+        docs = await db.documents.find(
+            {"project_id": project_id, "is_confirmed": True},
+            {"_id": 0},
+        ).to_list(length=50)
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No confirmed documents found.")
+
+    # Combine all confirmed text
+    full_text = "\n\n".join(d.get("cleaned_text", "") for d in docs if d.get("cleaned_text"))
+
+    if not full_text.strip():
+        raise HTTPException(status_code=400, detail="Confirmed documents have no text.")
+
+    # Split into scenes
+    scenes_raw = parse_scenes_regex(full_text)
+
+    result_scenes = []
+    total_lines = 0
+
+    if scenes_raw and len(scenes_raw) >= 1:
+        # Multi-scene: extract per scene
+        for scene in scenes_raw:
+            pairs = build_cue_line_pairs(scene["text"], character)
+            if not pairs:
+                continue
+            total_lines += len(pairs)
+            result_scenes.append({
+                "scene_number": scene["scene_number"],
+                "heading": scene["heading"],
+                "line_pairs": [
+                    {
+                        "index": i,
+                        "cue_speaker": p["cue_speaker"],
+                        "cue_text": p["cue_text"],
+                        "line_text": p["line_text"],
+                    }
+                    for i, p in enumerate(pairs)
+                ],
+            })
+    else:
+        # No scene headers found: treat entire text as one scene
+        pairs = build_cue_line_pairs(full_text, character)
+        total_lines = len(pairs)
+        if pairs:
+            result_scenes.append({
+                "scene_number": 1,
+                "heading": "Full Script",
+                "line_pairs": [
+                    {
+                        "index": i,
+                        "cue_speaker": p["cue_speaker"],
+                        "cue_text": p["cue_text"],
+                        "line_text": p["line_text"],
+                    }
+                    for i, p in enumerate(pairs)
+                ],
+            })
+
+    logger.info(f"[EXTRACT] {total_lines} lines for '{character}' across {len(result_scenes)} scenes (0 GPT calls)")
+
+    return {
+        "project_id": project_id,
+        "character": character,
+        "total_lines": total_lines,
+        "scenes": result_scenes,
+        "full_text": full_text,
+    }
+
+
 
 
 

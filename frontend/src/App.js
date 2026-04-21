@@ -9,6 +9,7 @@ import ProjectCreate from "@/components/ProjectCreate";
 import DocumentUpload from "@/components/DocumentUpload";
 import DocumentReview from "@/components/DocumentReview";
 import CharacterSelect from "@/components/CharacterSelect";
+import PrepView from "@/components/PrepView";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -135,32 +136,11 @@ function App() {
 
           {!loading && view === "prep" && activeProject && (
             <motion.div key="prep" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
-              <div className="min-h-screen px-4 pt-16 max-w-lg mx-auto text-center" data-testid="prep-placeholder">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mx-auto mb-4">
-                  <span className="text-emerald-400 text-lg font-bold">{activeProject.selected_character?.[0]}</span>
-                </div>
-                <h1 className="text-lg font-semibold text-zinc-100 mb-1">
-                  Playing: {activeProject.selected_character}
-                </h1>
-                <p className="text-sm text-zinc-500 mb-1">{activeProject.title}</p>
-                <p className="text-xs text-zinc-600 mb-8">Line extraction & prep dashboard coming in Feature #6</p>
-                <div className="flex flex-col gap-2">
-                  <button
-                    onClick={() => setView("characters")}
-                    className="text-sm text-amber-400 hover:text-amber-300 transition-colors"
-                    data-testid="change-character-btn"
-                  >
-                    Change character
-                  </button>
-                  <button
-                    onClick={handleBackToHome}
-                    className="text-sm text-zinc-500 hover:text-zinc-300 transition-colors"
-                    data-testid="prep-back-home-btn"
-                  >
-                    Back to projects
-                  </button>
-                </div>
-              </div>
+              <PrepView
+                project={activeProject}
+                onBack={handleBackToHome}
+                onChangeCharacter={() => setView("characters")}
+              />
             </motion.div>
           )}
         </AnimatePresence>
