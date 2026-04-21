@@ -72,7 +72,7 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
         </div>
         <div>
           <h1 className="text-lg font-bold text-zinc-100">
-            {isAudition ? "New Audition" : "New Booked Role"}
+            {isAudition ? "Create Audition" : "New Booked Role"}
           </h1>
         </div>
       </div>
@@ -86,7 +86,7 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
             Project / Show *
           </label>
           <Input
-            placeholder={isAudition ? 'e.g. "Netflix Drama Callback"' : 'e.g. "If a Woman Wants — EP 1-4"'}
+            placeholder={isAudition ? 'e.g. Night Shift' : 'e.g. If a Woman Wants — EP 1-4'}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
@@ -101,7 +101,7 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
             Character *
           </label>
           <Input
-            placeholder='e.g. "Felix"'
+            placeholder='e.g. Jack'
             value={roleName}
             onChange={(e) => setRoleName(e.target.value)}
             className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
