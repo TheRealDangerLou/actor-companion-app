@@ -42,6 +42,8 @@ function App() {
         const allConfirmed = docs.every((d) => d.is_confirmed);
         if (!allConfirmed) {
           setView("project");
+        } else if (proj.selected_character) {
+          setView("prep");
         } else {
           setView("characters");
         }

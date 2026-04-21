@@ -34,7 +34,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | 2 | Multi-document upload + OCR extraction | COMPLETE (29/29 tests) | No |
 | 3 | Deterministic document classification + manual override | COMPLETE (33/33 tests) | No |
 | 4 | Script cleaning + review/edit/confirm | COMPLETE (14/14 backend + full frontend flow) | No |
-| 5 | Character detection + selection | COMPLETE (8/8 backend + full frontend flow) | No |
+| 5 | Character detection + selection | COMPLETE (9/9 backend + full frontend flow, routing fix verified) | No |
 | 6 | Line extraction + cue pair generation | NOT STARTED (reuse existing extract_character_lines) | No |
 | 7 | Prep Dashboard basics (At-a-Glance, Scenes/My Lines) | NOT STARTED | No |
 | 8 | Read-Through | NOT STARTED | No |
