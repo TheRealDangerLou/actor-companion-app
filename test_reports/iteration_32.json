@@ -1,0 +1,40 @@
+{
+  "summary": "Feature #6.5 'Review My Lines' trust layer fully tested end-to-end @ 390px mobile viewport. Backend: 8/8 pytest passing (PUT save roundtrip, GET returns null before save, empty line_text pairs stripped, empty scenes stripped, PUT/GET 404 for unknown project, PUT 400 for empty scenes, PUT overwrite semantics). Frontend: 18/18 scenarios verified on Demo Script (character SARAH, 6 starting lines across 3 scenes). Found & fixed 1 CRITICAL runtime bug in PrepView.jsx: onEditLines was used in JSX (line 97) but not destructured from props → ReferenceError would crash PrepView on mount. Destructured it and verified full flow works.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_line_review.py",
+    "/app/test_reports/pytest/line_review_results.xml"
+  ],
+  "action_items": [
+    "(Already fixed by this tester) PrepView.jsx destructure onEditLines from props — confirm this small change is acceptable.",
+    "(Carried over from iteration_31) rehearse-skip-btn @ 390px is occluded by the Emergent badge in PrepView rehearse mode — not re-tested this run since scope was Feature #6.5, but the PrepView rehearse bottom-nav bug still applies."
+  ],
+  "critical_code_review_comments": [
+    "PrepView.jsx:14 — onEditLines was referenced in JSX but not declared in destructured props. This is a classic React ReferenceError that would crash PrepView as soon as it mounted with an Edit Lines link. Fixed by adding it to the destructuring list.",
+    "LineReview.jsx:47 — totalLines computed every render; fine for current scale (a few scenes) but consider useMemo if scripts get very large.",
+    "LineReview.jsx:28 — the reviewed_lines fetch uses an empty catch `catch {}` which silently swallows errors. If the GET endpoint ever starts returning 500, the user falls through to extract-lines with no diagnostic. Consider logging the error.",
+    "Backend save_reviewed_lines strips empty line_text but leaves empty cue_text untouched. Acceptable since first-line '(Scene start)' cue has empty cue_speaker; no change needed.",
+    "LineReview.jsx parens-off regex `/\\s*\\(.*?\\)\\s*/g` is applied only at display time — the saved data still contains parens. Confirmed correct: user toggling parens is a view filter, not a persistent edit.",
+    "App.js handleLinesReviewed sets view='prep' but does NOT refresh activeProject. That's OK because PrepView fetches reviewed-lines on its own effect. Verified working.",
+    "Routing on project open (App.js:48–56): correctly checks reviewed_lines.length > 0 to decide prep vs lines. Verified with Demo Script (reopens to prep after saving)."
+  ],
+  "updated_files": [
+    "/app/frontend/src/components/PrepView.jsx (added onEditLines to destructured props — 1-line fix)",
+    "/app/backend/tests/test_line_review.py (new — 8 test cases)"
+  ],
+  "success_rate": {"backend": "100% (8/8)", "frontend": "100% (18/18 scenarios)"},
+  "test_credentials": "N/A — no auth",
+  "seed_data_creation": "Pytest creates/deletes TEST_Review_* projects via fixture. Used existing Demo Script (id=017a5a4f-9d91-4c92-9012-47d1c854d8e9, char=SARAH) for UI testing. NOTE: after this run Demo Script has reviewed_lines saved (4 lines across 2 scenes: KITCHEN + HALLWAY — LIVING ROOM was deleted during the delete/merge test). To re-test LineReview entry via project-reopen, either (a) click 'Edit Lines' from PrepView, or (b) directly wipe via db.projects.update_one unset reviewed_lines, or (c) create a fresh project with a multi-character script.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature #6.5 Review My Lines is FULLY VERIFIED. Scenarios tested in UI: (1) open project with confirmed docs + char + no reviewed_lines → LineReview loads; (2) header shows 'SARAH — 6 lines across 3 scenes'; (3) scene collapse/expand (toggle line-card hidden/visible); (4) tap line-card opens edit mode with editable cue+line textareas; (5) edit line text then Done → edit closes and new text shows on card; (6) toggle-parens-btn switches label (hints on)↔(hints off); (7) merge-btn-0-0 combines scene 0 from 2 pairs → 1; (8) delete-btn-0-0 removes pair (5→4 total); (9) save-lines-btn shows 'Lock 4 Lines & Rehearse', click saves and navigates to PrepView; (10) PrepView header shows updated '4 lines', Edit Lines link visible; (11) reopen project → PrepView directly (because reviewed_lines saved); (12) click prep-edit-lines → LineReview loads with the 4 saved lines (verified header 'SARAH — 4 lines across 2 scenes'); mobile 390px layout renders cleanly. Backend pytest file at /app/backend/tests/test_line_review.py — run for regression.",
+  "rca of the issue": "RCA for PrepView onEditLines crash: App.js was updated to pass onEditLines={() => setView('lines')} to PrepView, and PrepView.jsx line 97 conditionally renders the 'Edit Lines' link based on onEditLines. However the component signature on line 14 only destructured {project, onBack, onChangeCharacter}. Referencing a non-declared identifier in JSX throws 'ReferenceError: onEditLines is not defined' at render time, crashing PrepView. Fix applied: added onEditLines to the destructure list in PrepView.jsx:14. Validated end-to-end: PrepView mounts, Edit Lines link appears, click navigates back to LineReview."
+}

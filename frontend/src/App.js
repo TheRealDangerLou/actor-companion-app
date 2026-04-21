@@ -10,11 +10,12 @@ import DocumentUpload from "@/components/DocumentUpload";
 import DocumentReview from "@/components/DocumentReview";
 import CharacterSelect from "@/components/CharacterSelect";
 import PrepView from "@/components/PrepView";
+import LineReview from "@/components/LineReview";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function App() {
-  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review" | "characters" | "prep"
+  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review" | "characters" | "lines" | "prep"
   const [createMode, setCreateMode] = useState("audition");
   const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -44,7 +45,12 @@ function App() {
         if (!allConfirmed) {
           setView("project");
         } else if (proj.selected_character) {
-          setView("prep");
+          // Check if lines have been reviewed
+          if (proj.reviewed_lines && proj.reviewed_lines.length > 0) {
+            setView("prep");
+          } else {
+            setView("lines");
+          }
         } else {
           setView("characters");
         }
@@ -68,6 +74,10 @@ function App() {
 
   const handleCharacterSelected = useCallback((name) => {
     setActiveProject((prev) => prev ? { ...prev, selected_character: name } : prev);
+    setView("lines");
+  }, []);
+
+  const handleLinesReviewed = useCallback(() => {
     setView("prep");
   }, []);
 
@@ -134,12 +144,23 @@ function App() {
             </motion.div>
           )}
 
+          {!loading && view === "lines" && activeProject && (
+            <motion.div key="lines" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <LineReview
+                project={activeProject}
+                onLinesReviewed={handleLinesReviewed}
+                onBack={() => setView("characters")}
+              />
+            </motion.div>
+          )}
+
           {!loading && view === "prep" && activeProject && (
             <motion.div key="prep" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
               <PrepView
                 project={activeProject}
                 onBack={handleBackToHome}
                 onChangeCharacter={() => setView("characters")}
+                onEditLines={() => setView("lines")}
               />
             </motion.div>
           )}

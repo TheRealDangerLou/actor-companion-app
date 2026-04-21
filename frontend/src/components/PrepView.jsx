@@ -11,13 +11,28 @@ import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
-export default function PrepView({ project, onBack, onChangeCharacter }) {
+export default function PrepView({ project, onBack, onChangeCharacter, onEditLines }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("read"); // "read" | "rehearse"
 
   useEffect(() => {
     async function load() {
+      try {
+        // Prefer user-reviewed lines if they exist
+        const reviewed = await axios.get(`${API}/projects/${project.id}/reviewed-lines`);
+        if (reviewed.data.reviewed_lines) {
+          setData({
+            character: reviewed.data.character || project.selected_character,
+            total_lines: reviewed.data.total_lines,
+            scenes: reviewed.data.reviewed_lines,
+          });
+          setLoading(false);
+          return;
+        }
+      } catch {}
+
+      // Fall back to fresh extraction
       try {
         const resp = await axios.post(`${API}/projects/${project.id}/extract-lines`);
         setData(resp.data);
@@ -27,7 +42,7 @@ export default function PrepView({ project, onBack, onChangeCharacter }) {
       setLoading(false);
     }
     load();
-  }, [project.id]);
+  }, [project.id, project.selected_character]);
 
   if (loading) {
     return (
@@ -79,6 +94,15 @@ export default function PrepView({ project, onBack, onChangeCharacter }) {
             >
               Change
             </button>
+            {onEditLines && (
+              <button
+                onClick={onEditLines}
+                className="text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors shrink-0"
+                data-testid="prep-edit-lines"
+              >
+                Edit Lines
+              </button>
+            )}
           </div>
 
           {/* Mode tabs */}

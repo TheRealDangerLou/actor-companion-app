@@ -1739,6 +1739,81 @@ async def extract_lines(project_id: str):
 
 
 
+# ============================================================
+# LINE REVIEW — USER-EDITABLE LINES (Feature #6.5)
+# ============================================================
+
+@api_router.put("/projects/{project_id}/reviewed-lines")
+async def save_reviewed_lines(project_id: str, request: dict):
+    """Save user-reviewed/edited line pairs. These become the source of truth for rehearsal.
+    Expects {scenes: [{scene_number, heading, line_pairs: [{cue_speaker, cue_text, line_text}]}]}"""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    scenes = request.get("scenes", [])
+    if not scenes:
+        raise HTTPException(status_code=400, detail="No scenes provided")
+
+    # Validate and normalize
+    cleaned_scenes = []
+    total = 0
+    for s in scenes:
+        pairs = s.get("line_pairs", [])
+        if not pairs:
+            continue
+        cleaned_pairs = []
+        for p in pairs:
+            lt = p.get("line_text", "").strip()
+            if not lt:
+                continue
+            cleaned_pairs.append({
+                "cue_speaker": p.get("cue_speaker", ""),
+                "cue_text": p.get("cue_text", ""),
+                "line_text": lt,
+            })
+        if cleaned_pairs:
+            total += len(cleaned_pairs)
+            cleaned_scenes.append({
+                "scene_number": s.get("scene_number", 1),
+                "heading": s.get("heading", ""),
+                "line_pairs": cleaned_pairs,
+            })
+
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$set": {
+            "reviewed_lines": cleaned_scenes,
+            "reviewed_lines_count": total,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }},
+    )
+
+    logger.info(f"[REVIEW] Saved {total} reviewed lines across {len(cleaned_scenes)} scenes for project {project_id[:12]}")
+    return {"status": "ok", "total_lines": total, "scene_count": len(cleaned_scenes)}
+
+
+@api_router.get("/projects/{project_id}/reviewed-lines")
+async def get_reviewed_lines(project_id: str):
+    """Get user-reviewed lines for a project. Returns null if not yet reviewed."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    reviewed = project.get("reviewed_lines")
+    if not reviewed:
+        return {"project_id": project_id, "reviewed_lines": None, "total_lines": 0}
+
+    total = sum(len(s.get("line_pairs", [])) for s in reviewed)
+    return {
+        "project_id": project_id,
+        "reviewed_lines": reviewed,
+        "total_lines": total,
+        "character": project.get("selected_character"),
+    }
+
+
+
 
 
 # --- Endpoints ---
