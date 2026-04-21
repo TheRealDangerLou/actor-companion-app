@@ -1445,6 +1445,14 @@ def detect_characters_from_text(text: str) -> dict:
         "CHAPTER", "TITLE", "CREDITS",
     )
 
+    # Exact-match labels that are never characters
+    skip_exact = {
+        "SELF-TAPE INSTRUCTIONS", "WARDROBE", "PERFORMANCE",
+        "TAKES", "READER", "DEADLINE", "INSTRUCTIONS",
+        "NOTES", "REFERENCE", "CALLBACK", "AUDITION",
+        "SIDES", "DIRECTION", "DIRECTIONS",
+    }
+
     for line in text.split("\n"):
         stripped = line.strip()
         if not stripped or len(stripped) > 60 or len(stripped) < 2:
@@ -1459,6 +1467,10 @@ def detect_characters_from_text(text: str) -> dict:
 
         # Reject scene headings, transitions, structural markers
         if any(raw_name.startswith(p) for p in skip_prefixes):
+            continue
+
+        # Reject known labels that aren't characters
+        if raw_name in skip_exact:
             continue
 
         # Reject single-letter or too-short names

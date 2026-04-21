@@ -1,0 +1,37 @@
+{
+  "summary": "Tested 3 bug fixes for Actor's Companion Feature #5. Backend fixes #2 (filter SELF-TAPE INSTRUCTIONS, WARDROBE, PERFORMANCE, TAKES, READER, DEADLINE, etc.) VERIFIED PASSING via new pytest case. Frontend fix #3 (post-confirm routes to prep-placeholder with Change character + Back to projects buttons, Change character returns to character-select) VERIFIED PASSING via Playwright e2e. Frontend fix #1 (reopening project with selected_character should route to prep-placeholder, not character-select) FAILS — the fix was NOT applied in App.js. handleOpenProject (lines 32-53) only checks allConfirmed; it does not consult proj.selected_character and always routes to 'characters' when all docs are confirmed. Reproduced live: 'PROJECT NIGHT VISIT' with backend selected_character=OLIVER reopens to character-select instead of prep-placeholder.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {"component": "App.js handleOpenProject", "issue": "Fix #1 NOT applied. After all docs confirmed, always routes to 'characters' view regardless of selected_character. Should route to 'prep' when proj.selected_character is truthy. Reproduced: opening PROJECT NIGHT VISIT (backend has selected_character=OLIVER) shows character-select instead of prep-placeholder, causing the routing loop the fix was supposed to eliminate.", "selector": "handleOpenProject (App.js line ~32-53)", "priority": "HIGH"}
+    ],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_character_detection.py",
+    "/app/test_reports/pytest/character_detection_results.xml"
+  ],
+  "action_items": [
+    "Fix handleOpenProject in /app/frontend/src/App.js to check proj.selected_character when allConfirmed. Suggested change inside the else branch at line ~45: if (proj.selected_character) { setView('prep'); } else { setView('characters'); }",
+    "After fix, retest: (a) reopen PROJECT NIGHT VISIT -> should show prep-placeholder with 'Playing: OLIVER' (or current value); (b) reopen a project that has all docs confirmed but no selected_character -> should still show character-select."
+  ],
+  "critical_code_review_comments": [
+    "handleOpenProject is missing the selected_character branch entirely — the PR description in the problem statement does not match the committed code. Either the change was lost in a later edit or never saved.",
+    "The prep-placeholder view correctly uses optional chaining (activeProject.selected_character?.[0]) which handles the null case gracefully — good defensive coding.",
+    "Backend filter list is well-scoped to EXACT matches (skip_exact set) so it won't accidentally filter multi-word character names like 'DETECTIVE JONES' or 'ALEX INSTRUCTOR'. Good implementation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_character_detection.py (added test_detect_characters_filters_label_words — 9th test case)"
+  ],
+  "success_rate": {"backend": "100% (9/9 pytest)", "frontend": "66% (2/3 fixes verified; fix #1 not applied)"},
+  "test_credentials": "N/A — no auth",
+  "seed_data_creation": "Created and cleaned up TEST_LabelFilter, TEST_NoConfirm, TEST_MultiDoc, TEST_CharDetect via pytest/API. Test data removed.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Fix #1 is the only remaining bug. It requires a ~3 line change in App.js handleOpenProject to branch on proj.selected_character. Backend filter (fix #2) fully working — regression covered by test_detect_characters_filters_label_words. Post-confirm routing (fix #3) and prep-placeholder UI (change-character-btn, prep-back-home-btn) verified working. testids in use: prep-placeholder, change-character-btn, prep-back-home-btn, character-select, confirm-character-btn. Use PROJECT NIGHT VISIT project (id edcb57df-ae4d-4112-8cb6-418df93d5f0d) for reopen testing — note that its selected_character was overwritten to MAYA during this run because I clicked confirm with the auto-selected top character; set it back via PUT /api/projects/{id} {selected_character:'OLIVER'} before retesting if needed.",
+  "rca of the issue": "RCA fix #1: handleOpenProject in /app/frontend/src/App.js currently implements: `if (!allConfirmed) setView('project'); else setView('characters');` — it never inspects proj.selected_character. Expected per problem statement: when all documents are confirmed AND proj.selected_character is set, setView('prep'); otherwise setView('characters'). Reproduction: GET /api/projects returns PROJECT NIGHT VISIT with selected_character='OLIVER' and all documents confirmed; clicking the project card on home triggers handleOpenProject which routes to 'characters' view (CharacterSelect) — confirmed visually. Mitigation: add `if (proj.selected_character) { setView('prep'); } else { setView('characters'); }` inside the allConfirmed branch."
+}

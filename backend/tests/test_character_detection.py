@@ -198,3 +198,70 @@ def test_multi_doc_aggregation():
         assert chars[0]["name"] == "ALICE"
     finally:
         requests.delete(f"{BASE_URL}/api/projects/{pid}")
+
+
+def test_detect_characters_filters_label_words():
+    """Labels like SELF-TAPE INSTRUCTIONS, WARDROBE, PERFORMANCE, TAKES, READER, DEADLINE must be filtered out,
+    while real characters OLIVER, DIANA, ALEX remain."""
+    script = """SELF-TAPE INSTRUCTIONS
+Please follow these instructions carefully.
+
+WARDROBE
+Casual clothing.
+
+PERFORMANCE
+Natural and grounded.
+
+TAKES
+Two takes maximum.
+
+READER
+Off-camera reader will help.
+
+DEADLINE
+Submit by Friday.
+
+INT. CAFE - DAY
+
+OLIVER
+Hello there.
+
+DIANA
+Hi Oliver.
+
+ALEX
+Can I join?
+
+OLIVER
+Of course.
+
+DIANA
+We're waiting for someone.
+"""
+    r = requests.post(f"{BASE_URL}/api/projects", json={"title": "TEST_LabelFilter", "mode": "audition"})
+    pid = r.json()["id"]
+    try:
+        r = requests.post(f"{BASE_URL}/api/projects/{pid}/documents",
+                          data={"pasted_text": script, "doc_type": "sides"})
+        assert r.status_code in (200, 201), r.text
+        doc_id = r.json().get("id") or r.json().get("doc_id")
+        requests.post(f"{BASE_URL}/api/documents/{doc_id}/confirm", json={"cleaned_text": script})
+
+        r = requests.post(f"{BASE_URL}/api/projects/{pid}/detect-characters")
+        assert r.status_code == 200, r.text
+        names = [c["name"] for c in r.json()["characters"]]
+
+        # Must filter out all label words
+        forbidden = ["SELF-TAPE INSTRUCTIONS", "WARDROBE", "PERFORMANCE",
+                     "TAKES", "READER", "DEADLINE", "INSTRUCTIONS",
+                     "NOTES", "REFERENCE", "CALLBACK", "AUDITION",
+                     "SIDES", "DIRECTION", "DIRECTIONS"]
+        for bad in forbidden:
+            assert bad not in names, f"Label '{bad}' should be filtered but appears in {names}"
+
+        # Real characters must remain
+        assert "OLIVER" in names, f"OLIVER missing in {names}"
+        assert "DIANA" in names, f"DIANA missing in {names}"
+        assert "ALEX" in names, f"ALEX missing in {names}"
+    finally:
+        requests.delete(f"{BASE_URL}/api/projects/{pid}")
