@@ -2,7 +2,7 @@ import { useState, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { ArrowLeft, Briefcase, Film, Calendar, Clock, Video, Users } from "lucide-react";
+import { ArrowLeft, Briefcase, Film, ChevronDown, ChevronUp, Calendar, Clock, Video, Users } from "lucide-react";
 import axios from "axios";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
@@ -14,20 +14,26 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
   const [auditionTime, setAuditionTime] = useState("");
   const [auditionFormat, setAuditionFormat] = useState(null);
   const [saving, setSaving] = useState(false);
+  const [showOptional, setShowOptional] = useState(false);
 
   const isAudition = mode === "audition";
 
   const handleCreate = useCallback(async () => {
     const trimmedTitle = title.trim();
+    const trimmedRole = roleName.trim();
     if (!trimmedTitle) {
       toast.error("Give your project a name.");
+      return;
+    }
+    if (!trimmedRole) {
+      toast.error("Enter your character name.");
       return;
     }
     setSaving(true);
     try {
       const resp = await axios.post(`${API}/projects`, {
         title: trimmedTitle,
-        role_name: roleName.trim(),
+        role_name: trimmedRole,
         mode,
         audition_date: auditionDate || null,
         audition_time: auditionTime || null,
@@ -55,7 +61,7 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
       </Button>
 
       {/* Header */}
-      <div className="flex items-center gap-3 mb-8">
+      <div className="flex items-center gap-3 mb-2">
         <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${
           isAudition ? "bg-amber-500/10" : "bg-blue-500/10"
         }`}>
@@ -68,16 +74,16 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
           <h1 className="text-lg font-bold text-zinc-100">
             {isAudition ? "New Audition" : "New Booked Role"}
           </h1>
-          <p className="text-xs text-zinc-500">Set up your project.</p>
         </div>
       </div>
+      <p className="text-[13px] text-zinc-500 mb-7">Create your audition, then upload your sides.</p>
 
       {/* Form */}
       <div className="space-y-5">
-        {/* Project title */}
+        {/* Project / Show */}
         <div>
           <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-            Project Title *
+            Project / Show *
           </label>
           <Input
             placeholder={isAudition ? 'e.g. "Netflix Drama Callback"' : 'e.g. "If a Woman Wants — EP 1-4"'}
@@ -89,10 +95,10 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
           />
         </div>
 
-        {/* Role name */}
+        {/* Character */}
         <div>
           <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-            Role Name
+            Character *
           </label>
           <Input
             placeholder='e.g. "Felix"'
@@ -101,74 +107,85 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
             className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
             data-testid="role-name-input"
           />
-          <p className="text-[11px] text-zinc-600 mt-1">Optional — you can also set this after uploading.</p>
         </div>
 
-        {/* Audition date/time (audition mode only) */}
+        {/* Optional details toggle */}
         {isAudition && (
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                <Calendar className="w-3 h-3 inline mr-1" />
-                Date
-              </label>
-              <Input
-                type="date"
-                value={auditionDate}
-                onChange={(e) => setAuditionDate(e.target.value)}
-                className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
-                data-testid="audition-date-input"
-              />
-            </div>
-            <div className="flex-1">
-              <label className="block text-xs font-medium text-zinc-400 mb-1.5">
-                <Clock className="w-3 h-3 inline mr-1" />
-                Time
-              </label>
-              <Input
-                type="time"
-                value={auditionTime}
-                onChange={(e) => setAuditionTime(e.target.value)}
-                className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
-                data-testid="audition-time-input"
-              />
-            </div>
-          </div>
+          <button
+            onClick={() => setShowOptional((v) => !v)}
+            className="flex items-center gap-1.5 text-[12px] text-zinc-500 hover:text-zinc-400 transition-colors"
+            data-testid="toggle-optional-btn"
+          >
+            {showOptional ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+            Optional details
+          </button>
         )}
 
-        {/* Audition format */}
-        {isAudition && (
-          <div>
-            <label className="block text-xs font-medium text-zinc-400 mb-2">
-              Format
-            </label>
+        {/* Audition date/time (collapsed by default) */}
+        {isAudition && showOptional && (
+          <>
             <div className="flex gap-3">
-              <button
-                onClick={() => setAuditionFormat(auditionFormat === "self-tape" ? null : "self-tape")}
-                className={`flex-1 h-12 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                  auditionFormat === "self-tape"
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
-                }`}
-                data-testid="format-self-tape"
-              >
-                <Video className="w-4 h-4" />
-                Self-Tape
-              </button>
-              <button
-                onClick={() => setAuditionFormat(auditionFormat === "in-person" ? null : "in-person")}
-                className={`flex-1 h-12 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
-                  auditionFormat === "in-person"
-                    ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
-                }`}
-                data-testid="format-in-person"
-              >
-                <Users className="w-4 h-4" />
-                In-Person
-              </button>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  <Calendar className="w-3 h-3 inline mr-1" />
+                  Date
+                </label>
+                <Input
+                  type="date"
+                  value={auditionDate}
+                  onChange={(e) => setAuditionDate(e.target.value)}
+                  className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
+                  data-testid="audition-date-input"
+                />
+              </div>
+              <div className="flex-1">
+                <label className="block text-xs font-medium text-zinc-400 mb-1.5">
+                  <Clock className="w-3 h-3 inline mr-1" />
+                  Time
+                </label>
+                <Input
+                  type="time"
+                  value={auditionTime}
+                  onChange={(e) => setAuditionTime(e.target.value)}
+                  className="h-12 bg-zinc-900 border-zinc-800 text-zinc-200 rounded-xl text-sm"
+                  data-testid="audition-time-input"
+                />
+              </div>
             </div>
-          </div>
+
+            {/* Audition format */}
+            <div>
+              <label className="block text-xs font-medium text-zinc-400 mb-2">
+                Format
+              </label>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setAuditionFormat(auditionFormat === "self-tape" ? null : "self-tape")}
+                  className={`flex-1 h-12 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                    auditionFormat === "self-tape"
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
+                  }`}
+                  data-testid="format-self-tape"
+                >
+                  <Video className="w-4 h-4" />
+                  Self-Tape
+                </button>
+                <button
+                  onClick={() => setAuditionFormat(auditionFormat === "in-person" ? null : "in-person")}
+                  className={`flex-1 h-12 rounded-xl border text-sm font-medium flex items-center justify-center gap-2 transition-colors ${
+                    auditionFormat === "in-person"
+                      ? "border-amber-500/40 bg-amber-500/10 text-amber-400"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-700"
+                  }`}
+                  data-testid="format-in-person"
+                >
+                  <Users className="w-4 h-4" />
+                  In-Person
+                </button>
+              </div>
+            </div>
+          </>
         )}
       </div>
 
@@ -176,11 +193,11 @@ export default function ProjectCreate({ mode, onCreated, onBack }) {
       <div className="mt-10">
         <Button
           onClick={handleCreate}
-          disabled={saving || !title.trim()}
+          disabled={saving || !title.trim() || !roleName.trim()}
           className="w-full h-14 bg-amber-500 hover:bg-amber-600 text-black font-semibold rounded-xl text-sm"
           data-testid="create-project-btn"
         >
-          {saving ? "Creating..." : "Create Project"}
+          {saving ? "Creating..." : "Continue \u2192 Upload Sides"}
         </Button>
       </div>
     </div>
