@@ -37,6 +37,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | 5 | Character detection + selection | COMPLETE (9/9 backend + full frontend flow, routing fix verified) | No |
 | 6 | Line extraction + cue pair generation | COMPLETE (9/9 backend + full frontend flow) | No |
 | 6.5 | Review My Lines (trust layer) | COMPLETE (8/8 backend + 18/18 frontend) | No |
+| QC | Quick Coach (optional coaching panel) | COMPLETE (6/6 backend + 11/11 frontend) | Yes (1 cached GPT call) |
 | 7 | Prep Dashboard basics (At-a-Glance, Scenes/My Lines) | NOT STARTED | No |
 | 8 | Read-Through | NOT STARTED | No |
 | 9 | Export | NOT STARTED | No |
@@ -74,6 +75,9 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 
 - `POST /api/projects/{id}/detect-characters` — scan confirmed docs for characters (ranked by frequency)
 - `POST /api/projects/{id}/extract-lines` — extract lines + cue pairs grouped by scene for selected character
+- `PUT /api/projects/{id}/reviewed-lines` — save user-edited line pairs
+- `GET /api/projects/{id}/reviewed-lines` — retrieve saved reviewed lines
+- `POST /api/projects/{id}/quick-coach` — generate/retrieve cached coaching notes (1 GPT call)
 
 ## Implementation Rules
 - One feature at a time
@@ -91,4 +95,5 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - Feature #5 bugfix (Routing loop + filtering): /app/test_reports/iteration_30.json
 - Feature #6 (Line Extraction + Rehearsal): /app/test_reports/iteration_31.json — 9/9 backend + full frontend flow
 - Feature #6.5 (Review My Lines): /app/test_reports/iteration_32.json — 8/8 backend + 18/18 frontend
+- Quick Coach: /app/test_reports/iteration_33.json — 6/6 backend + 11/11 frontend
 raction + Rehearsal): /app/test_reports/iteration_31.json — 9/9 backend + full frontend flow
