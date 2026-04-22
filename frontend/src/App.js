@@ -71,24 +71,47 @@ function App() {
     }
   }, []);
 
-  const handleAllConfirmed = useCallback(() => {
-    setView("characters");
-  }, []);
-
-  const handleCharacterSelected = useCallback(async (name) => {
-    setActiveProject((prev) => prev ? { ...prev, selected_character: name } : prev);
-    // Detect content type to choose the right path
+  const handleAllConfirmed = useCallback(async () => {
+    // Detect content type before routing
     try {
       const resp = await axios.post(`${API}/projects/${activeProject.id}/detect-content-type`);
       const ct = resp.data.content_type;
       setActiveProject((prev) => prev ? { ...prev, content_type: ct } : prev);
       if (ct === "breakdown") {
-        setView("breakdown");
-      } else {
-        setView("lines");
+        // For breakdowns, auto-use the role_name as selected_character (skip CharacterSelect)
+        const roleName = activeProject.role_name?.trim();
+        if (roleName) {
+          await axios.put(`${API}/projects/${activeProject.id}`, { selected_character: roleName.toUpperCase() });
+          setActiveProject((prev) => prev ? { ...prev, selected_character: roleName.toUpperCase() } : prev);
+          setView("breakdown");
+        } else {
+          // No role name — still need character selection
+          setView("characters");
+        }
+        return;
       }
-    } catch {
-      // Default to script path on error
+    } catch {}
+    setView("characters");
+  }, [activeProject]);
+
+  const handleCharacterSelected = useCallback(async (name) => {
+    setActiveProject((prev) => prev ? { ...prev, selected_character: name } : prev);
+    // Check if content_type was already detected
+    const ct = activeProject?.content_type;
+    if (ct === "breakdown") {
+      setView("breakdown");
+    } else if (!ct) {
+      // Detect if not yet done
+      try {
+        const resp = await axios.post(`${API}/projects/${activeProject.id}/detect-content-type`);
+        setActiveProject((prev) => prev ? { ...prev, content_type: resp.data.content_type } : prev);
+        if (resp.data.content_type === "breakdown") {
+          setView("breakdown");
+          return;
+        }
+      } catch {}
+      setView("lines");
+    } else {
       setView("lines");
     }
   }, [activeProject]);

@@ -38,6 +38,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | 6 | Line extraction + cue pair generation | COMPLETE (9/9 backend + full frontend flow) | No |
 | 6.5 | Review My Lines (trust layer) | COMPLETE (8/8 backend + 18/18 frontend) | No |
 | QC | Quick Coach (optional coaching panel) | COMPLETE (6/6 backend + 11/11 frontend) | Yes (1 cached GPT call) |
+| CT | Content-type detection (script vs breakdown) | COMPLETE (10/10 backend + 5/5 frontend) | No |
 | 7 | Prep Dashboard basics (At-a-Glance, Scenes/My Lines) | NOT STARTED | No |
 | 8 | Read-Through | NOT STARTED | No |
 | 9 | Export | NOT STARTED | No |
@@ -96,4 +97,6 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - Feature #6 (Line Extraction + Rehearsal): /app/test_reports/iteration_31.json — 9/9 backend + full frontend flow
 - Feature #6.5 (Review My Lines): /app/test_reports/iteration_32.json — 8/8 backend + 18/18 frontend
 - Quick Coach: /app/test_reports/iteration_33.json — 6/6 backend + 11/11 frontend
+- Content-Type Detection: /app/test_reports/iteration_34.json — 10/10 backend + 5/5 frontend
+- Content-Type Detection: /app/test_reports/iteration_34.json — 10/10 backend + 5/5 frontend
 raction + Rehearsal): /app/test_reports/iteration_31.json — 9/9 backend + full frontend flow
