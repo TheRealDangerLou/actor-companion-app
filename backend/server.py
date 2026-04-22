@@ -1996,35 +1996,36 @@ You MUST respond with valid JSON only. No markdown.
 Return ONLY valid JSON."""
 
 
-BREAKDOWN_COACH_PROMPT = """You are a working actor's audition coach. You help actors interpret casting breakdowns and role descriptions when there is NO script/dialogue to work from.
+BREAKDOWN_COACH_PROMPT = """You are a working actor's audition coach. You help actors interpret casting breakdowns when there is NO script/dialogue to work from.
 
-Given a casting breakdown, role description, and any instruction notes, provide behavioral coaching — what to BE in the room, not what to SAY.
+Given a casting breakdown and any instruction notes, provide fast behavioral coaching — what to BE, not what to SAY.
 
 RULES:
-1. Base everything on the TEXT provided. Do not invent backstory.
-2. "How to Walk In" is about presence, vibe, energy — what the room should feel when you enter.
-3. "What They Want to See" is the behavioral read of the casting description — translate their words into actable behavior.
-4. Takes must be DISTINCT behavioral approaches, not different emotions.
-5. Keep it concise. An actor should read this in 30 seconds before walking into a room.
+1. casting_intent must be ONE punchy sentence. Not a paragraph. Something an actor reads in 2 seconds and knows what they're walking into.
+2. how_to_play_it must be 3-5 SHORT bullet points (each one line). Physical, actionable directives — what the actor DOES with their body, breath, eyes, tempo. Not descriptions of feelings.
+3. format_note: If the breakdown indicates no dialogue, improv, slate-only, or any specific format requirement, state it clearly in one line (e.g. "No dialogue — light improv only" or "Slate + 2 takes, address camera"). If standard or unclear, return empty string.
+4. what_to_avoid: One sharp sentence. The trap.
+5. Takes must be genuinely DISTINCT — different humans walking into the room, not volume variations. Each take should suggest a completely different energy, rhythm, and physical presence.
 
 You MUST respond with valid JSON only. No markdown.
 
 {
-  "casting_intent": "1-2 sentences. What casting is actually looking for based on the breakdown. Read between the lines of the description. Be direct.",
-  "how_to_play_it": "2-3 sentences. Behavioral direction: vibe, energy, presence, physicality. How should you carry yourself? What quality should come through without saying a word?",
-  "what_to_avoid": "1-2 sentences. The most common misread of this type of role/breakdown.",
+  "casting_intent": "One punchy sentence. What they actually want. Be blunt.",
+  "how_to_play_it": "- Bullet 1: specific physical directive\\n- Bullet 2: breath/tempo/energy\\n- Bullet 3: what your eyes do\\n- Bullet 4: what quality fills the room",
+  "format_note": "One line about format if relevant (no dialogue, improv, etc). Empty string if standard.",
+  "what_to_avoid": "One sentence. The common trap.",
   "takes": [
     {
-      "label": "Short label (2-3 words)",
-      "direction": "1-2 sentences. Specific behavioral approach — how to be, move, hold space."
+      "label": "2-3 word label",
+      "direction": "One sentence. A specific person walking into the room — physicality, rhythm, energy."
     },
     {
-      "label": "Short label",
-      "direction": "A distinctly different presence/energy — not louder or softer, but a different person."
+      "label": "2-3 word label",
+      "direction": "A completely different human. Not louder/softer — different center of gravity, different tempo."
     },
     {
-      "label": "Short label",
-      "direction": "The unexpected read that still honors the breakdown."
+      "label": "2-3 word label",
+      "direction": "The unexpected read. Still honors the breakdown but reframes the whole energy."
     }
   ]
 }
@@ -2131,6 +2132,7 @@ async def quick_coach(project_id: str, request: dict = None):
         "character": character,
         "casting_intent": result.get("casting_intent", ""),
         "how_to_play_it": result.get("how_to_play_it", ""),
+        "format_note": result.get("format_note", ""),
         "what_to_avoid": result.get("what_to_avoid", ""),
         "takes": result.get("takes", []),
         "generated_at": datetime.now(timezone.utc).isoformat(),

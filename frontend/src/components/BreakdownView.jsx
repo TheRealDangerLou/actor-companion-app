@@ -103,7 +103,7 @@ export default function BreakdownView({ project, onBack, onChangeCharacter }) {
             className="space-y-4"
             data-testid="coach-primary"
           >
-            {/* Casting Intent — the #1 thing */}
+            {/* Casting Intent — one punchy line */}
             {coachData.casting_intent && (
               <div data-testid="primary-casting-intent">
                 <div className="flex items-center gap-1.5 mb-1.5">
@@ -116,16 +116,27 @@ export default function BreakdownView({ project, onBack, onChangeCharacter }) {
               </div>
             )}
 
-            {/* How to Play It — actionable direction */}
+            {/* Format note — if relevant */}
+            {coachData.format_note && (
+              <div className="bg-blue-500/5 border border-blue-500/15 rounded-lg px-3 py-2" data-testid="primary-format-note">
+                <p className="text-[12px] text-blue-300 font-medium">{coachData.format_note}</p>
+              </div>
+            )}
+
+            {/* How to Play It — actionable bullets */}
             {coachData.how_to_play_it && (
               <div data-testid="primary-how-to-play">
                 <div className="flex items-center gap-1.5 mb-1.5">
                   <Zap className="w-3.5 h-3.5 text-amber-400" />
                   <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">Your direction</p>
                 </div>
-                <p className="text-[14px] text-zinc-300 leading-relaxed">
-                  {coachData.how_to_play_it}
-                </p>
+                <div className="space-y-1">
+                  {coachData.how_to_play_it.split("\n").filter(l => l.trim()).map((line, i) => (
+                    <p key={i} className="text-[13px] text-zinc-300 leading-snug">
+                      {line.trim().startsWith("-") ? line.trim() : `- ${line.trim()}`}
+                    </p>
+                  ))}
+                </div>
               </div>
             )}
 
