@@ -5,7 +5,8 @@ import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, BookOpen, Dumbbell, Eye, EyeOff, ChevronDown, ChevronUp,
-  Loader2, User, RotateCcw, ChevronRight, ChevronLeft,
+  Loader2, User, RotateCcw, ChevronRight, ChevronLeft, Sparkles, X, RefreshCw,
+  Target, Zap, ShieldAlert,
 } from "lucide-react";
 import axios from "axios";
 
@@ -15,6 +16,9 @@ export default function PrepView({ project, onBack, onChangeCharacter, onEditLin
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mode, setMode] = useState("read"); // "read" | "rehearse"
+  const [coachOpen, setCoachOpen] = useState(false);
+  const [coachData, setCoachData] = useState(null);
+  const [coachLoading, setCoachLoading] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -146,9 +150,167 @@ export default function PrepView({ project, onBack, onChangeCharacter, onEditLin
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Quick Coach FAB */}
+      {!coachOpen && (
+        <button
+          onClick={async () => {
+            setCoachOpen(true);
+            if (coachData) return; // already loaded
+            setCoachLoading(true);
+            try {
+              const resp = await axios.post(`${API}/projects/${project.id}/quick-coach`);
+              setCoachData(resp.data);
+            } catch (err) {
+              const msg = err.response?.data?.detail || "Coaching failed.";
+              toast.error(msg);
+              setCoachOpen(false);
+            }
+            setCoachLoading(false);
+          }}
+          className="fixed bottom-20 right-4 z-50 w-11 h-11 rounded-full bg-amber-500 hover:bg-amber-600 text-black flex items-center justify-center shadow-lg shadow-amber-500/20 transition-transform hover:scale-105"
+          data-testid="quick-coach-fab"
+        >
+          <Sparkles className="w-5 h-5" />
+        </button>
+      )}
+
+      {/* Quick Coach Panel */}
+      <AnimatePresence>
+        {coachOpen && (
+          <>
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setCoachOpen(false)}
+              className="fixed inset-0 z-50 bg-black/60"
+              data-testid="coach-backdrop"
+            />
+            {/* Panel */}
+            <motion.div
+              initial={{ y: "100%" }}
+              animate={{ y: 0 }}
+              exit={{ y: "100%" }}
+              transition={{ type: "spring", damping: 28, stiffness: 300 }}
+              className="fixed bottom-0 left-0 right-0 z-50 max-h-[85vh] overflow-y-auto bg-[#0c0c0f] border-t border-zinc-800 rounded-t-2xl"
+              data-testid="coach-panel"
+            >
+              <div className="max-w-lg mx-auto px-4 pt-4 pb-8">
+                {/* Handle + header */}
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-400" />
+                    <h2 className="text-sm font-semibold text-zinc-100">Quick Coach</h2>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {coachData && !coachLoading && (
+                      <button
+                        onClick={async () => {
+                          setCoachLoading(true);
+                          try {
+                            const resp = await axios.post(`${API}/projects/${project.id}/quick-coach`, { force: true });
+                            setCoachData(resp.data);
+                            toast.success("Coaching regenerated.");
+                          } catch (err) {
+                            toast.error(err.response?.data?.detail || "Regeneration failed.");
+                          }
+                          setCoachLoading(false);
+                        }}
+                        className="text-[11px] text-zinc-500 hover:text-zinc-300 flex items-center gap-1 transition-colors"
+                        data-testid="coach-regenerate-btn"
+                      >
+                        <RefreshCw className="w-3 h-3" /> Regenerate
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setCoachOpen(false)}
+                      className="text-zinc-500 hover:text-zinc-300 transition-colors p-1"
+                      data-testid="coach-close-btn"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                </div>
+
+                {coachLoading ? (
+                  <div className="flex flex-col items-center justify-center py-12 gap-3" data-testid="coach-loading">
+                    <Loader2 className="w-5 h-5 animate-spin text-amber-400" />
+                    <p className="text-xs text-zinc-500">Analyzing your script...</p>
+                  </div>
+                ) : coachData ? (
+                  <div className="space-y-4" data-testid="coach-content">
+                    {/* Casting Intent */}
+                    <CoachSection
+                      icon={<Target className="w-3.5 h-3.5 text-blue-400" />}
+                      label="Casting Intent"
+                      text={coachData.casting_intent}
+                      testId="coach-casting-intent"
+                    />
+
+                    {/* How to Play It */}
+                    <CoachSection
+                      icon={<Zap className="w-3.5 h-3.5 text-amber-400" />}
+                      label="How to Play It"
+                      text={coachData.how_to_play_it}
+                      testId="coach-how-to-play"
+                    />
+
+                    {/* What to Avoid */}
+                    <CoachSection
+                      icon={<ShieldAlert className="w-3.5 h-3.5 text-red-400" />}
+                      label="What to Avoid"
+                      text={coachData.what_to_avoid}
+                      testId="coach-avoid"
+                    />
+
+                    {/* Takes */}
+                    {coachData.takes && coachData.takes.length > 0 && (
+                      <div data-testid="coach-takes">
+                        <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider mb-2">Takes</p>
+                        <div className="space-y-2">
+                          {coachData.takes.map((take, i) => (
+                            <div
+                              key={i}
+                              className="bg-zinc-950 border border-zinc-800/60 rounded-lg px-3 py-2.5"
+                              data-testid={`coach-take-${i}`}
+                            >
+                              <p className="text-[11px] font-semibold text-amber-400/80 mb-0.5">{take.label}</p>
+                              <p className="text-[13px] text-zinc-300 leading-snug">{take.direction}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : null}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
+
+
+/* ============================
+   COACH SECTION HELPER
+   ============================ */
+function CoachSection({ icon, label, text, testId }) {
+  if (!text) return null;
+  return (
+    <div data-testid={testId}>
+      <div className="flex items-center gap-1.5 mb-1">
+        {icon}
+        <p className="text-[10px] font-mono text-zinc-500 uppercase tracking-wider">{label}</p>
+      </div>
+      <p className="text-[13px] text-zinc-300 leading-relaxed">{text}</p>
+    </div>
+  );
+}
+
 
 
 /* ============================

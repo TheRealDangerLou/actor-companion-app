@@ -1740,6 +1740,153 @@ async def extract_lines(project_id: str):
 
 
 # ============================================================
+# QUICK COACH — OPTIONAL GPT COACHING (Feature: Quick Coach)
+# ============================================================
+
+QUICK_COACH_PROMPT = """You are a working actor's audition coach. You give fast, specific, playable direction based ONLY on what's written on the page.
+
+Given a script excerpt and character name (and optionally casting/instruction notes), return coaching guidance.
+
+RULES:
+1. Be specific and actionable — not vague emotional labels.
+2. Base everything on the TEXT. If casting notes exist, factor them in.
+3. "How to Play It" should be a director's whisper: tempo, physicality, energy level, specific line readings.
+4. Takes must be DISTINCT from each other — different tactics, not different emotions.
+5. Keep it concise. An actor should read this in 30 seconds.
+
+You MUST respond with valid JSON only. No markdown.
+
+{
+  "casting_intent": "1-2 sentences. What casting is actually looking for based on the material and any notes. Be direct.",
+  "how_to_play_it": "2-3 sentences. Specific direction: energy level (1-10), tempo, where tension lives, breath. Reference specific lines if helpful.",
+  "what_to_avoid": "1-2 sentences. The most common trap an actor would fall into with this material.",
+  "takes": [
+    {
+      "label": "Short label (2-3 words)",
+      "direction": "1-2 sentences. Specific, physical, playable direction for this take."
+    },
+    {
+      "label": "Short label",
+      "direction": "Different tactic, not just a different feeling."
+    },
+    {
+      "label": "Short label",
+      "direction": "The surprising choice that's still text-supported."
+    }
+  ]
+}
+
+Return ONLY valid JSON."""
+
+
+@api_router.post("/projects/{project_id}/quick-coach")
+async def quick_coach(project_id: str, request: dict = None):
+    """Generate coaching notes for the selected character. Uses ONE GPT call, cached at project level."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    character = project.get("selected_character")
+    if not character:
+        raise HTTPException(status_code=400, detail="No character selected.")
+
+    force = (request or {}).get("force", False)
+
+    # Check cache first
+    if not force and project.get("coach_cache"):
+        logger.info(f"[COACH] Cache hit for project {project_id[:12]}")
+        return project["coach_cache"]
+
+    # Gather input: confirmed sides + instruction docs
+    sides_docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True, "type": "sides"},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    if not sides_docs:
+        sides_docs = await db.documents.find(
+            {"project_id": project_id, "is_confirmed": True},
+            {"_id": 0},
+        ).to_list(length=50)
+
+    if not sides_docs:
+        raise HTTPException(status_code=400, detail="No confirmed documents found.")
+
+    # Build script text
+    script_text = "\n\n".join(d.get("cleaned_text", "") for d in sides_docs if d.get("cleaned_text"))
+    if not script_text.strip():
+        raise HTTPException(status_code=400, detail="No text in confirmed documents.")
+
+    # Gather instruction/wardrobe/notes docs for context
+    context_docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True, "type": {"$in": ["instructions", "wardrobe", "notes"]}},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    context_text = ""
+    for cd in context_docs:
+        ct = cd.get("cleaned_text") or cd.get("original_text", "")
+        if ct:
+            context_text += f"\n\n[{cd.get('type', 'notes').upper()} DOCUMENT]\n{ct}"
+
+    # Truncate to reasonable size
+    max_script = 6000
+    if len(script_text) > max_script:
+        script_text = script_text[:max_script] + "\n\n[...truncated]"
+    if len(context_text) > 2000:
+        context_text = context_text[:2000] + "\n\n[...truncated]"
+
+    # Build prompt
+    user_prompt = f"Character: {character}\n\nSCRIPT:\n{script_text}"
+    if context_text.strip():
+        user_prompt += f"\n\nCASTING/INSTRUCTION NOTES:{context_text}"
+
+    # GPT call
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        raise HTTPException(status_code=500, detail="LLM API key not configured.")
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=str(uuid.uuid4()),
+            system_message=QUICK_COACH_PROMPT,
+        ).with_model("openai", "gpt-5.2")
+
+        response = await chat.send_message(UserMessage(text=user_prompt))
+
+        if not response or not response.strip():
+            raise Exception("Empty response from GPT")
+
+        result = parse_json_response(response)
+    except Exception as e:
+        err_str = str(e).lower()
+        if "budget" in err_str and "exceeded" in err_str:
+            raise HTTPException(status_code=402, detail="LLM budget exceeded. Add balance at Profile > Universal Key > Add Balance.")
+        logger.error(f"[COACH] GPT call failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Coaching generation failed: {e}")
+
+    # Cache on project
+    coach_data = {
+        "character": character,
+        "casting_intent": result.get("casting_intent", ""),
+        "how_to_play_it": result.get("how_to_play_it", ""),
+        "what_to_avoid": result.get("what_to_avoid", ""),
+        "takes": result.get("takes", []),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$set": {"coach_cache": coach_data, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    logger.info(f"[COACH] Generated coaching for '{character}' in project {project_id[:12]} (1 GPT call)")
+    return coach_data
+
+
+
+# ============================================================
 # LINE REVIEW — USER-EDITABLE LINES (Feature #6.5)
 # ============================================================
 
