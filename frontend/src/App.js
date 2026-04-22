@@ -11,11 +11,12 @@ import DocumentReview from "@/components/DocumentReview";
 import CharacterSelect from "@/components/CharacterSelect";
 import PrepView from "@/components/PrepView";
 import LineReview from "@/components/LineReview";
+import BreakdownView from "@/components/BreakdownView";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
 function App() {
-  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review" | "characters" | "lines" | "prep"
+  const [view, setView] = useState("home"); // "home" | "create" | "project" | "review" | "characters" | "lines" | "prep" | "breakdown"
   const [createMode, setCreateMode] = useState("audition");
   const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -45,8 +46,10 @@ function App() {
         if (!allConfirmed) {
           setView("project");
         } else if (proj.selected_character) {
-          // Check if lines have been reviewed
-          if (proj.reviewed_lines && proj.reviewed_lines.length > 0) {
+          const ct = proj.content_type;
+          if (ct === "breakdown") {
+            setView("breakdown");
+          } else if (proj.reviewed_lines && proj.reviewed_lines.length > 0) {
             setView("prep");
           } else {
             setView("lines");
@@ -72,10 +75,23 @@ function App() {
     setView("characters");
   }, []);
 
-  const handleCharacterSelected = useCallback((name) => {
+  const handleCharacterSelected = useCallback(async (name) => {
     setActiveProject((prev) => prev ? { ...prev, selected_character: name } : prev);
-    setView("lines");
-  }, []);
+    // Detect content type to choose the right path
+    try {
+      const resp = await axios.post(`${API}/projects/${activeProject.id}/detect-content-type`);
+      const ct = resp.data.content_type;
+      setActiveProject((prev) => prev ? { ...prev, content_type: ct } : prev);
+      if (ct === "breakdown") {
+        setView("breakdown");
+      } else {
+        setView("lines");
+      }
+    } catch {
+      // Default to script path on error
+      setView("lines");
+    }
+  }, [activeProject]);
 
   const handleLinesReviewed = useCallback(() => {
     setView("prep");
@@ -161,6 +177,16 @@ function App() {
                 onBack={handleBackToHome}
                 onChangeCharacter={() => setView("characters")}
                 onEditLines={() => setView("lines")}
+              />
+            </motion.div>
+          )}
+
+          {!loading && view === "breakdown" && activeProject && (
+            <motion.div key="breakdown" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2 }}>
+              <BreakdownView
+                project={activeProject}
+                onBack={handleBackToHome}
+                onChangeCharacter={() => setView("characters")}
               />
             </motion.div>
           )}

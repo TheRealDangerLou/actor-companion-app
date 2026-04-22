@@ -1738,6 +1738,223 @@ async def extract_lines(project_id: str):
     }
 
 
+# ============================================================
+# CONTENT-TYPE DETECTION + BREAKDOWN EXTRACTION
+# ============================================================
+
+def detect_content_type(text: str) -> str:
+    """Detect whether confirmed text is a 'script' (has dialogue) or 'breakdown' (casting/instructions).
+    
+    Looks for actual back-and-forth dialogue structure — not just ALL CAPS labels.
+    A dialogue exchange = Speaker A line(s) followed by Speaker B line(s).
+    
+    Returns: 'script' | 'breakdown'
+    """
+    if not text:
+        return "breakdown"
+
+    skip_prefixes = (
+        "INT.", "EXT.", "INT/EXT.", "I/E.",
+        "FADE", "CUT TO", "CUT.", "DISSOLVE",
+        "SCENE", "ACT ", "END ", "CONTINUED",
+        "THE END", "EPISODE", "EP.", "EP ",
+        "CHAPTER", "TITLE", "CREDITS",
+    )
+    skip_exact = {
+        "SELF-TAPE INSTRUCTIONS", "WARDROBE", "PERFORMANCE",
+        "TAKES", "READER", "DEADLINE", "INSTRUCTIONS",
+        "NOTES", "REFERENCE", "CALLBACK", "AUDITION",
+        "SIDES", "DIRECTION", "DIRECTIONS",
+        "ROLE", "CHARACTER", "DESCRIPTION", "SYNOPSIS",
+        "PROJECT", "NETWORK", "PRODUCER", "DIRECTOR",
+        "RATE", "UNION", "NON-UNION", "LOCATION",
+        "SHOOT DATE", "SHOOT DATES", "AVAILABILITY",
+        "SUBMISSIONS", "SUBMIT", "FORMAT",
+        # Multi-word breakdown section headers
+        "CHARACTER DESCRIPTION", "ROLE DESCRIPTION",
+        "CASTING NOTES", "CASTING INSTRUCTIONS",
+        "SELF TAPE", "SELF TAPE INSTRUCTIONS",
+        "TAPE INSTRUCTIONS", "AUDITION NOTES",
+        "PROJECT DETAILS", "SHOW DETAILS",
+        "WARDROBE NOTES", "PERFORMANCE NOTES",
+        "SHOOT DETAILS", "SUBMISSION DETAILS",
+        "CHARACTER BREAKDOWN", "ROLE BREAKDOWN",
+    }
+
+    def is_dialogue_speaker(s):
+        s = s.strip()
+        if not s or len(s) > 60 or len(s) < 2:
+            return False
+        m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
+        if not m:
+            return False
+        name = m.group(1).strip()
+        if any(name.startswith(p) for p in skip_prefixes):
+            return False
+        if name in skip_exact:
+            return False
+        alpha = re.sub(r'[\s\.\'\-]', '', name)
+        return len(alpha) >= 2
+
+    # Count dialogue exchanges: speaker A with dialogue, followed later by speaker B with dialogue
+    lines = text.split("\n")
+    speakers_with_dialogue = []
+    i = 0
+    while i < len(lines):
+        stripped = lines[i].strip()
+        if is_dialogue_speaker(stripped):
+            speaker = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', stripped).group(1).strip()
+            # Check if next non-blank line(s) look like dialogue (not another label or description)
+            j = i + 1
+            has_dialogue = False
+            while j < len(lines) and j < i + 5:
+                dl = lines[j].strip()
+                if not dl:
+                    j += 1
+                    continue
+                # Real dialogue is conversational: short-to-medium lines, not long descriptions
+                # Breakdown descriptions are typically 80+ chars of descriptive text
+                if not is_dialogue_speaker(dl) and not dl.isupper():
+                    # If the line is very long (80+ chars) it's likely a description, not dialogue
+                    if len(dl) > 80:
+                        break
+                    # If it reads like a label followed by content (e.g. "Late 20s, Latino...")
+                    if re.match(r'^(Late|Early|Mid)\s+\d', dl, re.IGNORECASE):
+                        break
+                    # Looks like actual dialogue
+                    has_dialogue = True
+                break
+            if has_dialogue:
+                speakers_with_dialogue.append(speaker)
+            i = j + 1 if has_dialogue else i + 1
+        else:
+            i += 1
+
+    # Count unique speakers with dialogue
+    unique_speakers = set(speakers_with_dialogue)
+
+    # Count actual exchanges (back-and-forth between different speakers)
+    exchanges = 0
+    prev_speaker = None
+    for sp in speakers_with_dialogue:
+        if prev_speaker and sp != prev_speaker:
+            exchanges += 1
+        prev_speaker = sp
+
+    logger.info(f"[DETECT] {len(unique_speakers)} speakers, {exchanges} exchanges, {len(speakers_with_dialogue)} dialogue blocks")
+
+    # Need at least 2 speakers AND at least 1 exchange for "script"
+    if len(unique_speakers) >= 2 and exchanges >= 1:
+        return "script"
+
+    return "breakdown"
+
+
+def extract_breakdown_sections(text: str) -> list:
+    """Extract structured sections from a casting breakdown / instruction text.
+    Looks for labeled sections (ALL CAPS label followed by content).
+    Returns [{label, content}]"""
+    if not text:
+        return []
+
+    lines = text.split("\n")
+    sections = []
+    current_label = None
+    current_lines = []
+
+    for line in lines:
+        stripped = line.strip()
+        # Detect section headers: ALL CAPS or CAPS + colon, short line
+        is_header = False
+        if stripped and len(stripped) < 60:
+            # "ROLE:", "CHARACTER DESCRIPTION:", "SELF-TAPE INSTRUCTIONS"
+            if re.match(r'^[A-Z][A-Z\s\.\-/]+:?\s*$', stripped) and len(stripped) > 2:
+                is_header = True
+            # "Role:", "Character:", mixed case with colon
+            elif re.match(r'^[A-Z][A-Za-z\s\-/]+:\s*$', stripped):
+                is_header = True
+
+        if is_header:
+            # Save previous section
+            if current_label and current_lines:
+                content = "\n".join(current_lines).strip()
+                if content:
+                    sections.append({"label": current_label, "content": content})
+            current_label = stripped.rstrip(":").strip()
+            current_lines = []
+        elif stripped:
+            current_lines.append(stripped)
+        elif current_lines:
+            current_lines.append("")  # preserve paragraph breaks
+
+    # Save last section
+    if current_label and current_lines:
+        content = "\n".join(current_lines).strip()
+        if content:
+            sections.append({"label": current_label, "content": content})
+
+    # If no labeled sections found, treat entire text as one section
+    if not sections and text.strip():
+        sections.append({"label": "Full Text", "content": text.strip()})
+
+    return sections
+
+
+@api_router.post("/projects/{project_id}/detect-content-type")
+async def detect_content_type_endpoint(project_id: str):
+    """Detect whether project contains script (dialogue) or breakdown (casting info).
+    Stores result on project for future routing."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No confirmed documents.")
+
+    full_text = "\n\n".join(d.get("cleaned_text", "") for d in docs if d.get("cleaned_text"))
+    content_type = detect_content_type(full_text)
+
+    # Store on project
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$set": {"content_type": content_type, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    logger.info(f"[DETECT] Project {project_id[:12]} content_type={content_type}")
+    return {"project_id": project_id, "content_type": content_type}
+
+
+@api_router.post("/projects/{project_id}/extract-breakdown")
+async def extract_breakdown(project_id: str):
+    """Extract structured sections from a casting breakdown / instruction text."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    if not docs:
+        raise HTTPException(status_code=400, detail="No confirmed documents.")
+
+    full_text = "\n\n".join(d.get("cleaned_text", "") for d in docs if d.get("cleaned_text"))
+    sections = extract_breakdown_sections(full_text)
+
+    return {
+        "project_id": project_id,
+        "character": project.get("selected_character"),
+        "sections": sections,
+        "full_text": full_text,
+    }
+
+
 
 # ============================================================
 # QUICK COACH — OPTIONAL GPT COACHING (Feature: Quick Coach)
@@ -1772,6 +1989,42 @@ You MUST respond with valid JSON only. No markdown.
     {
       "label": "Short label",
       "direction": "The surprising choice that's still text-supported."
+    }
+  ]
+}
+
+Return ONLY valid JSON."""
+
+
+BREAKDOWN_COACH_PROMPT = """You are a working actor's audition coach. You help actors interpret casting breakdowns and role descriptions when there is NO script/dialogue to work from.
+
+Given a casting breakdown, role description, and any instruction notes, provide behavioral coaching — what to BE in the room, not what to SAY.
+
+RULES:
+1. Base everything on the TEXT provided. Do not invent backstory.
+2. "How to Walk In" is about presence, vibe, energy — what the room should feel when you enter.
+3. "What They Want to See" is the behavioral read of the casting description — translate their words into actable behavior.
+4. Takes must be DISTINCT behavioral approaches, not different emotions.
+5. Keep it concise. An actor should read this in 30 seconds before walking into a room.
+
+You MUST respond with valid JSON only. No markdown.
+
+{
+  "casting_intent": "1-2 sentences. What casting is actually looking for based on the breakdown. Read between the lines of the description. Be direct.",
+  "how_to_play_it": "2-3 sentences. Behavioral direction: vibe, energy, presence, physicality. How should you carry yourself? What quality should come through without saying a word?",
+  "what_to_avoid": "1-2 sentences. The most common misread of this type of role/breakdown.",
+  "takes": [
+    {
+      "label": "Short label (2-3 words)",
+      "direction": "1-2 sentences. Specific behavioral approach — how to be, move, hold space."
+    },
+    {
+      "label": "Short label",
+      "direction": "A distinctly different presence/energy — not louder or softer, but a different person."
+    },
+    {
+      "label": "Short label",
+      "direction": "The unexpected read that still honors the breakdown."
     }
   ]
 }
@@ -1836,8 +2089,15 @@ async def quick_coach(project_id: str, request: dict = None):
     if len(context_text) > 2000:
         context_text = context_text[:2000] + "\n\n[...truncated]"
 
+    # Select prompt based on content_type
+    content_type = project.get("content_type", "script")
+    coach_prompt = BREAKDOWN_COACH_PROMPT if content_type == "breakdown" else QUICK_COACH_PROMPT
+
     # Build prompt
-    user_prompt = f"Character: {character}\n\nSCRIPT:\n{script_text}"
+    if content_type == "breakdown":
+        user_prompt = f"Character/Role: {character}\n\nCASTING BREAKDOWN:\n{script_text}"
+    else:
+        user_prompt = f"Character: {character}\n\nSCRIPT:\n{script_text}"
     if context_text.strip():
         user_prompt += f"\n\nCASTING/INSTRUCTION NOTES:{context_text}"
 
@@ -1850,7 +2110,7 @@ async def quick_coach(project_id: str, request: dict = None):
         chat = LlmChat(
             api_key=api_key,
             session_id=str(uuid.uuid4()),
-            system_message=QUICK_COACH_PROMPT,
+            system_message=coach_prompt,
         ).with_model("openai", "gpt-5.2")
 
         response = await chat.send_message(UserMessage(text=user_prompt))

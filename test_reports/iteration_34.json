@@ -1,0 +1,40 @@
+{
+  "summary": "Content-type detection + dual-path (script vs breakdown) routing fully verified end-to-end at 390px mobile. Backend: 10/10 pytest passing — detect-content-type returns 'breakdown' for casting text, 'script' for back-and-forth dialogue, 'breakdown' for single-speaker monologues, content_type persisted on project doc, extract-breakdown returns 4 labeled sections (ROLE / CHARACTER DESCRIPTION / CASTING NOTES / SELF-TAPE INSTRUCTIONS) with non-empty content, ALL CAPS headers without dialogue not misread as speakers, quick-coach succeeds for both content types and stores coach_cache, 404 errors for unknown project IDs. Frontend: full UI flow validated — (1) reopening existing TEST_breakdown project from home routes directly to BreakdownView (skips LineReview); (2) BreakdownView header shows 'Breakdown' badge, 4 collapsible sections render with toggle behavior; (3) breakdown-coach-fab opens panel with 'Behavioral' badge, all 4 coach blocks (intent/play/avoid/takes) render from cache, X close dismisses with framer-motion exit animation (~1s) and FAB returns; (4) reopening existing TEST_script project routes to LineReview (existing flow unchanged); (5) full new-project breakdown flow — paste casting text → tag SIDES → confirm doc → select char → detect-content-type call → routes to BreakdownView correctly. No regressions.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CharacterSelect on a pure breakdown project", "issues": ["Character detection picks up breakdown section labels (ROLE, CHARACTER DESCRIPTION, CASTING NOTES) as 'characters' because they are ALL CAPS, asking the actor to confirm 'CASTING NOTES' as the character. Out of scope for this review (lives in detect-characters / CharacterSelect, not in detect-content-type), but UX is awkward — consider hiding character select or pre-filling from project.role_name when content_type is detected as breakdown, OR running content-type detection BEFORE character selection so a breakdown project skips CharacterSelect entirely."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_content_type_detection.py",
+    "/app/test_reports/pytest/content_type_results.xml"
+  ],
+  "action_items": [
+    "Optional UX: run detect-content-type BEFORE CharacterSelect so breakdown projects skip the misleading character chip list (currently runs after character is confirmed in handleCharacterSelected).",
+    "Optional: when content_type='breakdown', pre-seed selected_character with project.role_name (already collected at create time) so the actor isn't forced to pick a section header as a character.",
+    "(Carried over from iteration_32) rehearse-skip-btn @ 390px is occluded by the Emergent badge in PrepView rehearse mode — out of scope for this run."
+  ],
+  "critical_code_review_comments": [
+    "server.py:1745 detect_content_type — detection logic uses heuristic of 'speaker line + dialogue line(s)' with 80-char threshold for descriptions and 'Late/Early/Mid \\d' regex to reject age descriptions. Works for the tested fixtures but is fragile to scripts where character names are formatted unusually (e.g., 'Sarah:' lowercase, 'SARAH (V.O.)' with parens) — current regex handles parens via `(?:\\s*\\(.*?\\))?` so OK. The 80-char rule could mis-classify unusually long dialogue lines (e.g., monologues with one long sentence) as breakdown — already proven by the monologue test classifying as breakdown, which happens to be the desired behavior here, but it's coincidental.",
+    "server.py:1853 extract_breakdown_sections — header regex `^[A-Z][A-Z\\s\\.\\-/]+:?\\s*$` will accept any short ALL-CAPS line as a header, including 'INT.' / 'EXT.' scene slugs if a script accidentally goes through this path. Since extract-breakdown is only called when content_type='breakdown', low risk in practice, but worth a guard.",
+    "App.js:78 handleCharacterSelected — calls detect-content-type AFTER the user has already selected a character on a breakdown project. The character chips on a breakdown are nonsensical (section labels). Detection should ideally happen at confirm-all step so CharacterSelect can be skipped entirely for breakdowns.",
+    "App.js:90 — on detect-content-type failure, defaults to 'lines' (script path). For a breakdown, this would route to an empty LineReview. Consider routing to 'breakdown' as the safer fallback when role_name/selected_character is set but no dialogue is detectable from extract-lines.",
+    "BreakdownView.jsx:248 — single 248-line file, well under the 700-line guideline. Good separation. Minor: extract-breakdown is re-fetched on every mount of BreakdownView with no caching — fine since it's a pure-text parse on the backend (~ms), but could be cached on project doc like coach_cache for symmetry.",
+    "BreakdownView.jsx:46 — same pattern as PrepView: on coach error, panel auto-closes and any prior cached display is lost. Minor UX nit.",
+    "server.py:2094 — coach prompt selection: `BREAKDOWN_COACH_PROMPT if content_type == 'breakdown' else QUICK_COACH_PROMPT`. Default branch is QUICK_COACH_PROMPT — safe; existing projects without content_type field continue to work."
+  ],
+  "updated_files": [],
+  "success_rate": {"backend": "100% (10/10)", "frontend": "100% (5/5 UI scenarios)"},
+  "test_credentials": "N/A — no auth",
+  "seed_data_creation": "Created 4 TEST_-prefixed projects via the API during pytest runs: TEST_breakdown_*, TEST_script_*, TEST_monologue_*, TEST_allcaps_headers_*. The breakdown and script projects had selected_character set (Jack Martinez / SARAH) and coach_cache populated by the prompt-routing tests. Also created UI_BD_Test via the UI for the new-project breakdown flow validation. None were deleted — leaving them in DB so next agent can re-test routing without re-seeding.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Content-type detection feature is FULLY VERIFIED. Backend pytest at /app/backend/tests/test_content_type_detection.py covers: detect-content-type for breakdown/script/monologue, persistence on project, 404, extract-breakdown sections + 404, quick-coach with breakdown prompt, quick-coach with script prompt, ALL CAPS headers edge case. Frontend testids verified working: breakdown-view, breakdown-loading, breakdown-back-btn, breakdown-change-char, breakdown-sections, breakdown-section-{i}, breakdown-section-toggle-{i}, breakdown-coach-fab, breakdown-coach-panel, breakdown-coach-content, breakdown-coach-close, breakdown-coach-regenerate, bd-coach-intent, bd-coach-play, bd-coach-avoid, bd-coach-takes. Existing TEST_breakdown_* and TEST_script_* projects still on home for re-test convenience. KNOWN UX ISSUE (not a defect, but worth flagging to product): for a breakdown-only project the character detection step shows section headers (ROLE/CASTING NOTES/etc.) as character chips because content-type is detected AFTER character selection. Could be improved by detecting earlier or by pre-seeding selected_character from project.role_name on breakdown content.",
+  "rca of the issue": "N/A — no defects discovered."
+}
