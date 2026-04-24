@@ -42,7 +42,7 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 | 7 | Prep Dashboard basics (At-a-Glance, Scenes/My Lines) | NOT STARTED | No |
 | 8 | Read-Through | NOT STARTED | No |
 | 9 | Export | NOT STARTED | No |
-| 10 | Prep generation (wardrobe, self-tape, action items) | NOT STARTED | Yes (1 call) |
+| 10 | Prep generation (wardrobe, self-tape, action items) | COMPLETE (5/5 backend + full frontend) | Yes (1 cached GPT call) |
 
 ## Document Types
 - sides, instructions, wardrobe, notes, reference, unknown
@@ -79,6 +79,9 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - `PUT /api/projects/{id}/reviewed-lines` — save user-edited line pairs
 - `GET /api/projects/{id}/reviewed-lines` — retrieve saved reviewed lines
 - `POST /api/projects/{id}/quick-coach` — generate/retrieve cached coaching notes (1 GPT call)
+- `POST /api/projects/{id}/detect-content-type` — detect script vs breakdown
+- `POST /api/projects/{id}/extract-breakdown` — extract labeled sections from casting breakdowns
+- `POST /api/projects/{id}/prep-generation` — generate/retrieve cached prep (wardrobe, self-tape, actions)
 
 ## Implementation Rules
 - One feature at a time
@@ -98,5 +101,4 @@ Actor's Companion is a mobile-first actor command center that turns messy auditi
 - Feature #6.5 (Review My Lines): /app/test_reports/iteration_32.json — 8/8 backend + 18/18 frontend
 - Quick Coach: /app/test_reports/iteration_33.json — 6/6 backend + 11/11 frontend
 - Content-Type Detection: /app/test_reports/iteration_34.json — 10/10 backend + 5/5 frontend
-- Content-Type Detection: /app/test_reports/iteration_34.json — 10/10 backend + 5/5 frontend
-raction + Rehearsal): /app/test_reports/iteration_31.json — 9/9 backend + full frontend flow
+- Prep Generation (#10): /app/test_reports/iteration_35.json — 5/5 backend + full frontend
