@@ -8,6 +8,7 @@ import {
   Target, Zap, ShieldAlert, FileText, ChevronDown, ChevronRight,
 } from "lucide-react";
 import axios from "axios";
+import AuditionPrep from "@/components/AuditionPrep";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -204,6 +205,9 @@ export default function BreakdownView({ project, onBack, onChangeCharacter }) {
             </Button>
           </div>
         )}
+
+        {/* === AUDITION PREP === */}
+        <AuditionPrep projectId={project.id} />
 
         {/* === SECONDARY: Raw breakdown details (collapsible) === */}
         {sections.length > 0 && (

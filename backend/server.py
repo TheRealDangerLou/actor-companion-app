@@ -1009,7 +1009,14 @@ async def update_project(project_id: str, request: UpdateProjectRequest):
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
     updates["updated_at"] = datetime.now(timezone.utc).isoformat()
-    result = await db.projects.update_one({"id": project_id}, {"$set": updates})
+    # Invalidate cached coaching/prep if character changes
+    if "selected_character" in updates:
+        result = await db.projects.update_one(
+            {"id": project_id},
+            {"$set": updates, "$unset": {"coach_cache": "", "prep_cache": ""}},
+        )
+    else:
+        result = await db.projects.update_one({"id": project_id}, {"$set": updates})
     if result.matched_count == 0:
         raise HTTPException(status_code=404, detail="Project not found")
     project = await db.projects.find_one({"id": project_id}, {"_id": 0})
@@ -2145,6 +2152,146 @@ async def quick_coach(project_id: str, request: dict = None):
 
     logger.info(f"[COACH] Generated coaching for '{character}' in project {project_id[:12]} (1 GPT call)")
     return coach_data
+
+
+
+# ============================================================
+# PREP GENERATION (Feature #10)
+# ============================================================
+
+PREP_GENERATION_PROMPT = """You are an actor's audition prep assistant. Given a project's script/breakdown, character name, and any casting/wardrobe/instruction notes, generate a concise prep checklist the actor can reference before and during their audition.
+
+RULES:
+1. Every item must be SPECIFIC to this audition — no generic advice.
+2. Wardrobe suggestions must be derived from the text (character description, setting, tone, any wardrobe notes). If wardrobe docs exist, prioritize those.
+3. Self-tape setup must reflect any instruction docs. If none exist, infer from the material's tone and setting.
+4. Action items are the 5-7 most important things to do before the audition — ordered by priority. Be concrete ("Record 2 takes with different energy levels" not "Prepare well").
+5. Keep everything scannable. Short lines. No paragraphs.
+
+You MUST respond with valid JSON only. No markdown.
+
+{
+  "wardrobe": [
+    "Specific clothing/look suggestion based on the material",
+    "Another specific suggestion",
+    "What to avoid wearing and why"
+  ],
+  "self_tape_setup": {
+    "framing": "Specific framing direction for this material",
+    "backdrop": "What background works and why",
+    "eyeline": "Where to look and the reason",
+    "energy_note": "One line about energy/volume calibration for camera"
+  },
+  "action_items": [
+    "Priority 1: Most important thing to do before the audition",
+    "Priority 2: ...",
+    "Priority 3: ...",
+    "Priority 4: ...",
+    "Priority 5: ..."
+  ]
+}
+
+Return ONLY valid JSON."""
+
+
+@api_router.post("/projects/{project_id}/prep-generation")
+async def prep_generation(project_id: str, request: dict = None):
+    """Generate audition prep (wardrobe, self-tape, action items). One GPT call, cached."""
+    project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    character = project.get("selected_character")
+    if not character:
+        raise HTTPException(status_code=400, detail="No character selected.")
+
+    force = (request or {}).get("force", False)
+
+    # Cache-first: if prep_cache exists and not forcing, return immediately
+    if not force and project.get("prep_cache"):
+        logger.info(f"[PREP] Cache hit for project {project_id[:12]}")
+        return project["prep_cache"]
+
+    # Gather all confirmed docs
+    all_docs = await db.documents.find(
+        {"project_id": project_id, "is_confirmed": True},
+        {"_id": 0},
+    ).to_list(length=50)
+
+    if not all_docs:
+        raise HTTPException(status_code=400, detail="No confirmed documents found.")
+
+    # Script/sides text
+    script_text = "\n\n".join(
+        d.get("cleaned_text", "") for d in all_docs
+        if d.get("cleaned_text") and d.get("type") in ("sides", "unknown")
+    )
+    if not script_text.strip():
+        script_text = "\n\n".join(d.get("cleaned_text", "") for d in all_docs if d.get("cleaned_text"))
+
+    # Instruction/wardrobe/notes context
+    context_parts = []
+    for d in all_docs:
+        if d.get("type") in ("instructions", "wardrobe", "notes") and d.get("cleaned_text"):
+            context_parts.append(f"[{d['type'].upper()}]\n{d['cleaned_text']}")
+
+    # Truncate
+    if len(script_text) > 6000:
+        script_text = script_text[:6000] + "\n\n[...truncated]"
+    context_text = "\n\n".join(context_parts)
+    if len(context_text) > 2000:
+        context_text = context_text[:2000] + "\n\n[...truncated]"
+
+    content_type = project.get("content_type", "script")
+    user_prompt = f"Project: {project.get('title', '')}\nCharacter: {character}\nContent type: {content_type}\n\n"
+    if content_type == "breakdown":
+        user_prompt += f"CASTING BREAKDOWN:\n{script_text}"
+    else:
+        user_prompt += f"SCRIPT:\n{script_text}"
+    if context_text.strip():
+        user_prompt += f"\n\nADDITIONAL DOCUMENTS:\n{context_text}"
+
+    # GPT call
+    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    if not api_key:
+        raise HTTPException(status_code=500, detail="LLM API key not configured.")
+
+    try:
+        chat = LlmChat(
+            api_key=api_key,
+            session_id=str(uuid.uuid4()),
+            system_message=PREP_GENERATION_PROMPT,
+        ).with_model("openai", "gpt-5.2")
+
+        response = await chat.send_message(UserMessage(text=user_prompt))
+
+        if not response or not response.strip():
+            raise Exception("Empty response from GPT")
+
+        result = parse_json_response(response)
+    except Exception as e:
+        err_str = str(e).lower()
+        if "budget" in err_str and "exceeded" in err_str:
+            raise HTTPException(status_code=402, detail="LLM budget exceeded. Add balance at Profile > Universal Key > Add Balance.")
+        logger.error(f"[PREP] GPT call failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Prep generation failed: {e}")
+
+    # Cache on project
+    prep_data = {
+        "character": character,
+        "wardrobe": result.get("wardrobe", []),
+        "self_tape_setup": result.get("self_tape_setup", {}),
+        "action_items": result.get("action_items", []),
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+    await db.projects.update_one(
+        {"id": project_id},
+        {"$set": {"prep_cache": prep_data, "updated_at": datetime.now(timezone.utc).isoformat()}},
+    )
+
+    logger.info(f"[PREP] Generated prep for '{character}' in project {project_id[:12]} (1 GPT call)")
+    return prep_data
 
 
 

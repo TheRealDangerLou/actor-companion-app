@@ -1,0 +1,35 @@
+{
+  "summary": "Feature #10 (Prep Generation) fully verified end-to-end. Backend: 5/5 pytest passing in test_prep_generation.py — 404 for unknown project, 400 for no character, 400 for no confirmed documents, happy path generates wardrobe/self_tape_setup/action_items with GPT call (~15s), second call returns identical generated_at from cache in <1s (cache-first verified), force=true produces new generated_at, and PUT /api/projects/{id} with selected_character clears BOTH prep_cache AND coach_cache ($unset verified via GET). Frontend: AuditionPrep renders correctly on both BreakdownView (Night Shift breakdown path) and PrepView Read mode (Demo Script script path). All data-testids present: audition-prep, prep-toggle, prep-content, prep-wardrobe (3 items), prep-self-tape with setup-framing/setup-backdrop/setup-eyeline/setup-energy, prep-actions (6 items), prep-regenerate-btn. Collapse toggle correctly unmounts prep-content (count 0→1). Regenerate button triggers force=true call, shows 'Refreshing...' state, then sonner toast 'Prep refreshed.' and content updates. Mobile layout at 390px clean — content is readable, icons aligned, scroll lands AuditionPrep below coaching on BreakdownView and below the script lines/action areas on PrepView Read mode.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_prep_generation.py",
+    "/app/test_reports/pytest/prep_generation_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py:2208 prep_generation reads `force` from request body, but endpoint signature uses `request: dict = None` — when no body is posted at all (axios.post(url) with no second arg), `request` comes in as None and `(request or {}).get(...)` handles it safely. OK, but AuditionPrep.jsx:22 always posts with empty-or-force body so this path is exercised only by the non-frontend caller.",
+    "server.py:2211 cache-first check uses `project.get('prep_cache')` — a non-empty dict truthy-check. If a prior failed run ever stored an empty dict, this would skip regeneration. Currently prep_cache is only ever written as a populated dict (lines 2280–2286), so low risk.",
+    "server.py:1013 PUT /projects — cache invalidation fires on ANY selected_character update, even when the value is unchanged (e.g., user re-selects the same character). Minor wasted GPT calls downstream. Consider comparing to existing value before invalidating. Non-blocking.",
+    "AuditionPrep.jsx:24 silently swallows load errors with `} catch {}` — if prep-generation fails (e.g., 400 no docs, 500 GPT error, 402 budget exceeded), the component renders `null` with no user-facing message. Consider showing a small error row with a retry link. Regenerate button path does surface the error via toast (line 37), so the explicit retry works — but initial-load silent failure hides 402 budget-exceeded scenarios.",
+    "AuditionPrep.jsx useEffect has no cleanup/abort — if the user navigates away before the 5–15s GPT call finishes, setState fires on an unmounted component. React swallows this in prod but a cancellation flag would be cleaner.",
+    "PREP_GENERATION_PROMPT at server.py:2162 emits an unconstrained JSON shape. parse_json_response handles the happy case, but if the model returns a string or wraps wardrobe in an object, .get('wardrobe', []) returns [] and the component silently renders nothing for that bucket. Worth a schema validator (e.g., pydantic model) before caching."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_prep_generation.py"
+  ],
+  "success_rate": {"backend": "100% (5/5)", "frontend": "100% (BreakdownView + PrepView + toggle + regenerate all pass)"},
+  "test_credentials": "N/A — no auth",
+  "seed_data_creation": "Module-scoped fixture `seeded_project` creates one TEST_prep_<hex> project per pytest session (full_script mode, Detective Maya character, 1 confirmed sides document with explicit wardrobe/self-tape/tone notes) and deletes it on teardown. Two older TEST_prep_* projects (a9037377, 4bb4c9dc) are visible on the home list from prior failed fixture setups — these have no documents and can be cleaned up by main agent if desired (not harmful).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Feature #10 Prep Generation is VERIFIED. Regression suite at /app/backend/tests/test_prep_generation.py covers: 404 unknown project, 400 no character, 400 no docs, happy path + schema + cache-first + force regenerate, character change → prep_cache AND coach_cache cleared. Frontend test path: Home → Night Shift card → BreakdownView → scroll to see audition-prep below coaching (coaching is rendered INLINE in BreakdownView here, not via FAB — no breakdown-coach-fab exists for this project). For PrepView path: Home → Demo Script card → Read mode opens by default → audition-prep renders below script lines. All testids verified: audition-prep, prep-toggle, prep-content, prep-wardrobe, wardrobe-item-{0..2}, prep-self-tape, setup-framing, setup-backdrop, setup-eyeline, setup-energy, prep-actions, action-item-{0..5}, prep-regenerate-btn, prep-gen-loading.",
+  "rca of the issue": "N/A — no defects found."
+}

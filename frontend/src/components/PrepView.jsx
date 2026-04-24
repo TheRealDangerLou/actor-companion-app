@@ -9,6 +9,7 @@ import {
   Target, Zap, ShieldAlert,
 } from "lucide-react";
 import axios from "axios";
+import AuditionPrep from "@/components/AuditionPrep";
 
 const API = `${process.env.REACT_APP_BACKEND_URL}/api`;
 
@@ -150,6 +151,13 @@ export default function PrepView({ project, onBack, onChangeCharacter, onEditLin
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Audition Prep — below Read/Rehearse content */}
+      {mode === "read" && (
+        <div className="max-w-lg mx-auto px-4">
+          <AuditionPrep projectId={project.id} />
+        </div>
+      )}
 
       {/* Quick Coach FAB */}
       {!coachOpen && (
