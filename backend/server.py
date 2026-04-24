@@ -26,13 +26,14 @@ from pillow_heif import register_heif_opener
 register_heif_opener()
 logging.info("HEIC/HEIF support registered")
 except ImportError:
-logging.warning("pillow-heif not installed — HEIC uploads won't be converted")
+logging.warning("pillow-heif not installed - HEIC uploads won't be converted")
 mongo_url = os.environ['MONGO_URL']
 client = AsyncIOMotorClient(mongo_url)
 db = client[os.environ['DB_NAME']]
 app = FastAPI()
 api_router = APIRouter(prefix="/api")
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s logger = logging.getLogger(__name__)
+- %(me
 # Serve uploaded files
 from fastapi.staticfiles import StaticFiles
 _upload_dir = os.path.join(os.path.dirname(__file__), "uploads")
@@ -56,7 +57,8 @@ CACHE_TTL_HOURS = 72 # 3 days
 SCENE_TEXT_HARD_CAP = 8000 # Max chars sent to GPT
 def compute_cache_key(text: str, mode: str, character_name: str = "") -> str:
 """Deterministic cache key from normalized inputs."""
-normalized = f"{text.strip()[:SCENE_TEXT_HARD_CAP]}|{mode}|{character_name.strip().lower()}|{return hashlib.sha256(normalized.encode()).hexdigest()
+normalized = f"{text.strip()[:SCENE_TEXT_HARD_CAP]}|{mode}|{character_name.strip().lower(
+return hashlib.sha256(normalized.encode()).hexdigest()
 async def get_cached_breakdown(cache_key: str):
 """Return cached breakdown if exists and not expired."""
 cached = await db.breakdown_cache.find_one({"cache_key": cache_key}, {"_id": 0})
@@ -69,9 +71,9 @@ if age_hours > CACHE_TTL_HOURS:
 logger.info(f"[COST] CACHE EXPIRED ({age_hours:.1f}h): {cache_key[:16]}")
 await db.breakdown_cache.delete_one({"cache_key": cache_key})
 return None
-logger.info(f"[COST] CACHE HIT ({age_hours:.1f}h old, saved 1 GPT call): {cache_key[:16]}")
+logger.info(f"[COST] CACHE HIT ({age_hours:.1f}h old, saved 1 GPT call): {cache_key[:16]}
 return cached.get("result")
-async def store_cached_breakdown(cache_key: str, result: dict, mode: str, char_name: str = ""):
+async def store_cached_breakdown(cache_key: str, result: dict, mode: str, char_name: str = ""
 """Store breakdown in cache for future reuse."""
 doc = {
 "cache_key": cache_key,
@@ -107,7 +109,7 @@ continue # drop page number lines entirely
 cleaned.append(line)
 lines = cleaned
 # --- Pass 2: Join (MORE) / (CONT'D) page-break splits ---
-# Find (MORE) → remove it and the following SAME_NAME (CONT'D) header
+# Find (MORE) -> remove it and the following SAME_NAME (CONT'D) header
 # so the dialogue before and after merge naturally
 joined = []
 i = 0
@@ -125,8 +127,8 @@ i = j + 1
 continue
 # If no matching CONT'D found, keep the line as-is
 # Detect standalone CONT'D headers (without preceding MORE)
-# e.g. "FELIX (CONT'D)" → keep as "FELIX" (strip the tag, keep the name)
-contd_match = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)\s*\(CONT\'?D\)\s*$', stripped, re.IGNORECASE)
+# e.g. "FELIX (CONT'D)" -> keep as "FELIX" (strip the tag, keep the name)
+contd_match = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)\s*\(CONT\'?D\)\s*$', stripped, re.IG
 if contd_match:
 joined.append(contd_match.group(1).strip())
 i += 1
@@ -135,8 +137,8 @@ joined.append(lines[i])
 i += 1
 lines = joined
 # --- Pass 3: Fix concatenated scene numbers in headings ---
-# "20INT. BAR - NIGHT" → "INT. BAR - NIGHT"
-# "13INT. ELLIE'S HOUSE" → "INT. ELLIE'S HOUSE"
+# "20INT. BAR - NIGHT" -> "INT. BAR - NIGHT"
+# "13INT. ELLIE'S HOUSE" -> "INT. ELLIE'S HOUSE"
 fixed = []
 for line in lines:
 s = line.strip()
@@ -151,7 +153,7 @@ lines = fixed
 # Preserve relative indentation for parentheticals only
 normalized = []
 for line in lines:
-# Strip leading whitespace entirely — screenplay format doesn't need it
+# Strip leading whitespace entirely - screenplay format doesn't need it
 # in our cleaned output
 normalized.append(line.strip())
 lines = normalized
@@ -167,7 +169,8 @@ m = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
 if not m:
 return False
 name = m.group(1).strip()
-if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|CUT\.|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|return False
+if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|CUT\.|EPISODE|EP[\.\s]|CHAPTER|CONT
+return False
 alpha_only = re.sub(r'[\s\.\'\-]', '', name)
 if len(alpha_only) < 2:
 return False
@@ -199,7 +202,7 @@ return "\n".join(final)
 # --- Deterministic Line Extraction (zero GPT) ---
 def extract_character_lines(text: str, character_name: str) -> dict:
 """Extract character dialogue from raw script text using pattern matching.
-Returns {chunked_lines, cue_recall} — no GPT call, no credits.
+Returns {chunked_lines, cue_recall} - no GPT call, no credits.
 Strategy:
 1. Primary pass: Find CHARACTER NAME headers and collect dialogue until a stop signal
 2. Fallback pass: Scan for any missed lines using loose pattern matching
@@ -209,7 +212,7 @@ return {"chunked_lines": [], "cue_recall": []}
 char_upper = character_name.strip().upper()
 lines = text.split("\n")
 def is_character_name(s):
-"""Check if a line is a character name (ALL CAPS, short, possibly with parenthetical)."""
+"""Check if a line is a character name (ALL CAPS, short, possibly with parenthetical)
 s = s.strip()
 if not s or len(s) > 60 or len(s) < 2:
 return False
@@ -218,7 +221,8 @@ if not m:
 return False
 name = m.group(1).strip()
 # Reject scene headings, transitions, page numbers
-if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|return False
+if re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|
+return False
 # Reject single-letter "names" like "I..." or "A."
 alpha_only = re.sub(r'[\s\.\'\-]', '', name)
 if len(alpha_only) < 2:
@@ -234,27 +238,30 @@ Used for inline detection (no blank line between dialogue and action)."""
 s = s.strip()
 if not s:
 return True
-# Page numbers: "8." or "9." or " 8."
-if re.match(r'^\d+\.\s*$', s):
+# Page numbers: "8." or "9." or " if re.match(r'^\d+\.\s*$', s):
+8."
 return True
-# Starts with lowercase and is long — likely action/description
+# Starts with lowercase and is long - likely action/description
 # BUT exclude common dialogue continuation words
 if s[0].islower() and len(s) > 15:
-if not re.match(r'^(and |but |or |because |so |then |that |just |like |maybe |if return True
+if not re.match(r'^(and |but |or |because |so |then |that |just |like |maybe |if
+return True
 # Starts with a proper-case name followed by action verb or adverb+verb
 # e.g., "Ivy grabs...", "Felix enters.", "Ivy slowly begins to crawl"
 # Only match known character-name patterns (2+ letters, not common words)
-if re.match(r"^[A-Z][a-z]{2,}(?:'s)?\s+(?:\w+ly\s+)?(?:is|was|has|had|are|were|isn't|# Exclude common dialogue starters that look like Name+verb
+if re.match(r"^[A-Z][a-z]{2,}(?:'s)?\s+(?:\w+ly\s+)?(?:is|was|has|had|are|were|isn't|
+# Exclude common dialogue starters that look like Name+verb
 first_word = s.split()[0] if s.split() else ""
-if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'well', return True
-# "We see...", "We hear...", "Close-up on...", "They..." — common action starts
+if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'w
+return True
+# "We see...", "We hear...", "Close-up on...", "They..." - common action starts
 if re.match(r'^(We |They |Close-up |The camera |His |Her |Their )', s):
 return True
 return False
 def is_action_line_strict(s):
 """Stricter action detection for peek-ahead after blank lines.
 Only flags lines that are unambiguously stage direction.
-Dialogue continuations often start with He/She/They/We/lowercase — don't flag those."""
+Dialogue continuations often start with He/She/They/We/lowercase - don't flag those."
 s = s.strip()
 if not s:
 return True
@@ -262,11 +269,15 @@ if re.match(r'^\d+\.\s*$', s):
 return True
 # Only flag: ProperName + physical action verb (no pronouns, no common words)
 # Must be a 2+ word proper name pattern followed directly by a physical verb
-if re.match(r"^[A-Z][a-z]{2,}(?:'s)?\s+(?:\w+ly\s+)?(?:enters|exits|turns|walks|grabs|first_word = s.split()[0] if s.split() else ""
-if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'well', return True
-# Narration pattern: His/Her/Their + 1-3 words + past-tense verb (clearly describing # e.g. "His whole world changed", "Her heart sank", "Their eyes met"
-if re.match(r'^(His|Her|Their|The)\s+(?:\w+\s+){0,3}\w*(ed|ank|oke|ell|ew|ung|ept|elt|return True
-# "Close-up on...", "The camera..." — unambiguous stage direction
+if re.match(r"^[A-Z][a-z]{2,}(?:'s)?\s+(?:\w+ly\s+)?(?:enters|exits|turns|walks|grabs
+first_word = s.split()[0] if s.split() else ""
+if first_word.lower() not in ('this', 'that', 'what', 'here', 'there', 'just', 'w
+return True
+# Narration pattern: His/Her/Their + 1-3 words + past-tense verb (clearly describing
+# e.g. "His whole world changed", "Her heart sank", "Their eyes met"
+if re.match(r'^(His|Her|Their|The)\s+(?:\w+\s+){0,3}\w*(ed|ank|oke|ell|ew|ung|ept|elt
+return True
+# "Close-up on...", "The camera..." - unambiguous stage direction
 if re.match(r'^(Close-up |The camera )', s):
 return True
 return False
@@ -290,56 +301,66 @@ while peek < len(lines) and not lines[peek].strip():
 peek += 1
 if peek < len(lines):
 next_content = lines[peek].strip()
-# Same speaker with CONT'D after blank = page-break continuation (MORE/if is_character_name(next_content):
+# Same speaker with CONT'D after blank = page-break continuation (MOR
+if is_character_name(next_content):
 nc_name = extract_name(next_content).upper()
-if nc_name == speaker.upper() and re.search(r"CONT'?D", next_content, i = peek + 1
+if nc_name == speaker.upper() and re.search(r"CONT'?D", next_cont
+i = peek + 1
 after_blank_skip = True
 continue
 break
 # Stop if heading or unambiguous action
-if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\is_action_line_strict(next_content):
+if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\
+is_action_line_strict(next_content):
 break
-# Otherwise dialogue continues — skip blank line(s)
+# Otherwise dialogue continues - skip blank line(s)
 i = peek
 after_blank_skip = True
 continue
 break
 # Another character name = end of this speaker's dialogue
-# UNLESS it's the same speaker with (CONT'D) — that's a page-break continuation
+# UNLESS it's the same speaker with (CONT'D) - that's a page-break continuati
 if is_character_name(dl):
 other_name = extract_name(dl).upper()
-if other_name == speaker.upper() and re.search(r"CONT'?D", dl, re.IGNORECASE):
+if other_name == speaker.upper() and re.search(r"CONT'?D", dl, re.IGNOREC
 i += 1
 continue
 break
 # Scene heading
-if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, break
+if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl
+break
 # Skip parentheticals like (beat), (pause)
 if re.match(r'^\(.*\)$', dl):
 i += 1
-after_blank_skip = True # protect next line from action check (same as blank-continue
-# Page number embedded in line — skip before action check
+after_blank_skip = True # protect next line from action check (same as b
+continue
+# Page number embedded in line - skip before action check
 # Treat as structural boundary (like blank line)
 if re.match(r'^\d+\.\s*$', dl):
 i += 1
 after_blank_skip = True
 continue
 # Action/description line = end of dialogue
-# Skip for first line (always dialogue) and lines reached via blank-line continuation
-# Also skip if previous dialogue line didn't end with sentence terminator (mid-prev_ended_sentence = True
+# Skip for first line (always dialogue) and lines reached via blank-line cont
+# Also skip if previous dialogue line didn't end with sentence terminator (mi
+prev_ended_sentence = True
 if dialogue_lines:
-prev_last_char = dialogue_lines[-1].rstrip()[-1:] if dialogue_lines[-1].rstrip() prev_ended_sentence = prev_last_char in '.!?"\u201d'
-if not first_line and not after_blank_skip and prev_ended_sentence and is_action_break
+prev_last_char = dialogue_lines[-1].rstrip()[-1:] if dialogue_lines[-1].r
+prev_ended_sentence = prev_last_char in '.!?"\u201d'
+if not first_line and not after_blank_skip and prev_ended_sentence and break
 dialogue_lines.append(dl)
 first_line = False
 after_blank_skip = False
 i += 1
 if dialogue_lines:
-dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines), else:
+dialogue_blocks.append({"speaker": speaker, "text": " ".join(dialogue_lines),
+is_act
+else:
 i += 1
 # --- Fallback pass: scan for missed character lines ---
-# Look for the pattern: char name on one line, dialogue on next, that we might have missed
-found_texts = {b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or char_patterns = [char_upper, f"{char_upper} (", f"{char_upper}("]
+# Look for the pattern: char name on one line, dialogue on next, that we might have misse
+found_texts = {b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper o
+char_patterns = [char_upper, f"{char_upper} (", f"{char_upper}("]
 i = 0
 while i < len(lines):
 stripped = lines[i].strip().upper()
@@ -369,11 +390,13 @@ next_content = lines[peek].strip()
 # Same speaker with CONT'D = page-break continuation
 if is_character_name(next_content):
 nc_name = extract_name(next_content).upper()
-if nc_name == fb_speaker and re.search(r"CONT'?D", next_content, j = peek + 1
+if nc_name == fb_speaker and re.search(r"CONT'?D", next_content,
+j = peek + 1
 fb_after_blank = True
 continue
 break
-if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\is_action_line_strict(next_content):
+if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\
+is_action_line_strict(next_content):
 break
 j = peek
 fb_after_blank = True
@@ -381,19 +404,22 @@ continue
 break
 if is_character_name(dl):
 other_fb_name = extract_name(dl).upper()
-if other_fb_name == fb_speaker and re.search(r"CONT'?D", dl, re.IGNORECASE):
+if other_fb_name == fb_speaker and re.search(r"CONT'?D", dl, re.IGNORECAS
 j += 1
 continue
 break
-if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl, break
+if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE\s|EP[\.\s])', dl
+break
 if re.match(r'^\(.*\)$', dl) or re.match(r'^\d+\.\s*$', dl):
 j += 1
-fb_after_blank = True # protect next line from action check
 continue
+fb_after_blank = True # protect next line from action check
 fb_prev_ended = True
 if fallback_lines:
-fb_prev_last = fallback_lines[-1].rstrip()[-1:] if fallback_lines[-1].rstrip() fb_prev_ended = fb_prev_last in '.!?"\u201d'
-if not fb_first_line and not fb_after_blank and fb_prev_ended and is_action_line(break
+fb_prev_last = fallback_lines[-1].rstrip()[-1:] if fallback_lines[-1].rst
+fb_prev_ended = fb_prev_last in '.!?"\u201d'
+if not fb_first_line and not fb_after_blank and fb_prev_ended and is_action_l
+break
 fallback_lines.append(dl)
 fb_first_line = False
 fb_after_blank = False
@@ -408,8 +434,10 @@ for di, db in enumerate(dialogue_blocks):
 if db["line_idx"] > i:
 insert_idx = di
 break
-dialogue_blocks.insert(insert_idx, {"speaker": extract_name(lines[i].strip()), found_texts.add(fb_text)
-logger.info(f"[PARSE] Fallback recovered line for {character_name}: '{fb_i = j if fallback_lines else i + 1
+dialogue_blocks.insert(insert_idx, {"speaker": extract_name(lines[i].stri
+found_texts.add(fb_text)
+logger.info(f"[PARSE] Fallback recovered line for {character_name}: '{fb_
+i = j if fallback_lines else i + 1
 else:
 i += 1
 if not dialogue_blocks:
@@ -431,13 +459,16 @@ cue_recall.append({
 "cue_speaker": cue_speaker,
 })
 # Build chunked_lines
-char_lines = [b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or chunked_lines = []
+char_lines = [b["text"] for b in dialogue_blocks if b["speaker"].upper() == char_upper or
+chunked_lines = []
 for ci in range(0, len(char_lines), 3):
 chunk = char_lines[ci:ci + 3]
 chunked_lines.append({
-"chunk_label": f"Chunk {ci // 3 + 1} ({len(chunk)} line{'s' if len(chunk) != 1 else "lines": "\n".join(chunk),
+"chunk_label": f"Chunk {ci // 3 + 1} ({len(chunk)} line{'s' if len(chunk) != 1 el
+"lines": "\n".join(chunk),
 })
-logger.info(f"[PARSE] Deterministic: {len(cue_recall)} lines for '{character_name}' (0 GPT return {"chunked_lines": chunked_lines, "cue_recall": cue_recall}
+logger.info(f"[PARSE] Deterministic: {len(cue_recall)} lines for '{character_name}' (0 GP
+return {"chunked_lines": chunked_lines, "cue_recall": cue_recall}
 class ParseLinesRequest(BaseModel):
 text: str
 character_name: str
@@ -525,7 +556,7 @@ mode: Optional[str] = "quick"
 character_name: Optional[str] = ""
 # --- Scene Parsing ---
 def parse_scenes_regex(text: str) -> Optional[List[dict]]:
-"""Split script text into scenes using standard screenplay markers, episode markers, or dividers."""
+"""Split script text into scenes using standard screenplay markers, episode markers, or d
 # 1. Standard scene headers: INT./EXT./INT\/EXT./I/E.
 pattern = r'(?:^|\n)\s*((?:INT\.|EXT\.|INT/EXT\.|I/E\.)[\s\S]*?)(?=\n)'
 headers = list(re.finditer(pattern, text, re.IGNORECASE | re.MULTILINE))
@@ -535,7 +566,8 @@ pattern2 = r'(?:^|\n)\s*((?:SCENE\s+\d+|ACT\s+\w+)[\s\S]*?)(?=\n)'
 headers = list(re.finditer(pattern2, text, re.IGNORECASE | re.MULTILINE))
 if len(headers) < 2:
 # 3. Episode / chapter markers: "EPISODE 1", "EP 1", "EP. 1", "CHAPTER 1", "#1"
-pattern3 = r'(?:^|\n)\s*((?:EPISODE\s+\d+|EP\.?\s*\d+|CHAPTER\s+\d+|#\s*\d+)[\s\S]*?)(?=\headers = list(re.finditer(pattern3, text, re.IGNORECASE | re.MULTILINE))
+pattern3 = r'(?:^|\n)\s*((?:EPISODE\s+\d+|EP\.?\s*\d+|CHAPTER\s+\d+|#\s*\d+)[\s\S]*?)
+headers = list(re.finditer(pattern3, text, re.IGNORECASE | re.MULTILINE))
 if len(headers) < 2:
 return None # Need GPT fallback
 scenes = []
@@ -544,7 +576,7 @@ start = match.start()
 end = headers[i + 1].start() if i < len(headers) - 1 else len(text)
 scene_text = text[start:end].strip()
 heading = match.group(1).strip()
-# Clean heading — take first line only
+# Clean heading - take first line only
 heading = heading.split('\n')[0].strip()
 scenes.append({
 "scene_number": i + 1,
@@ -553,10 +585,11 @@ scenes.append({
 })
 return scenes
 def detect_characters_in_scene(scene_text: str) -> List[str]:
-"""Detect character names from screenplay dialogue cues (ALL CAPS names on their own line)."""
+"""Detect character names from screenplay dialogue cues (ALL CAPS names on their own line
 lines = scene_text.split('\n')
 characters = set()
-skip_prefixes = ('INT', 'EXT', 'FADE', 'CUT TO', 'SCENE', 'ACT ', 'END ', 'CONTINUED', 'THE for line in lines:
+skip_prefixes = ('INT', 'EXT', 'FADE', 'CUT TO', 'SCENE', 'ACT ', 'END ', 'CONTINUED', 'T
+for line in lines:
 stripped = line.strip()
 # Character cue: mostly uppercase, possibly with (V.O.) (O.S.) (CONT'D)
 if not stripped or len(stripped) > 60:
@@ -571,8 +604,7 @@ if not any(name_clean.startswith(p) for p in skip_prefixes):
 characters.add(name_clean)
 return sorted(characters)
 def character_in_scene(scene_text: str, character_name: str) -> bool:
-"""Check if a character appears in a scene (case-insensitive, checks dialogue cues and mentions)."""
-name_upper = character_name.upper().strip()
+"""Check if a character appears in a scene (case-insensitive, checks dialogue cues name_upper = character_name.upper().strip()
 characters = detect_characters_in_scene(scene_text)
 # Direct match in character cues
 for c in characters:
@@ -580,6 +612,7 @@ if name_upper in c or c in name_upper:
 return True
 # Fallback: search in full text
 return bool(re.search(re.escape(character_name), scene_text, re.IGNORECASE))
+and me
 SCENE_SPLIT_PROMPT = """You are a script parser. Given a full screenplay or script, split it
 RULES:
 1. Each scene is a continuous block of action in one location/time.
@@ -598,25 +631,41 @@ Return this exact structure:
 ]
 }"""
 # --- Prompts ---
-QUICK_SYSTEM_PROMPT = """You are a working actor's script analyst. You break down audition sides RULES — read these before every response:
-1. ONLY describe what is observable in the dialogue, stage directions, and character behavior 2. Do NOT infer hidden emotions, guilt, shame, vulnerability, or backstory that isn't written.
-3. If a character is cruel, play cruel. If they're dismissive, play dismissive. Do not soften 4. Objectives must be ACTIVE VERBS describing what the character is doing TO the other person. 5. Beats track TACTIC SHIFTS — when the character changes what they're doing, not what they're 6. Subtext = what the line is doing tactically, not a therapy session about what they "really 7. Acting takes must describe specific physical choices and line deliveries an actor can execute 8. NO emotional labels as descriptors. Not "cool contempt" or "authoritative satisfaction." Instead You MUST respond with valid JSON only. No markdown.
+QUICK_SYSTEM_PROMPT = """You are a working actor's script analyst. You break down audition si
+RULES - read these before every response:
+1. ONLY describe what is observable in the dialogue, stage directions, and character behavior
+2. Do NOT infer hidden emotions, guilt, shame, vulnerability, or backstory that isn't written
+3. If a character is cruel, play cruel. If they're dismissive, play dismissive. Do not soften
+4. Objectives must be ACTIVE VERBS describing what the character is doing TO the other person
+5. Beats track TACTIC SHIFTS - when the character changes what they're doing, not what they'r
+6. Subtext = what the line is doing tactically, not a therapy session about what they "really
+7. Acting takes must describe specific physical choices and line deliveries an actor can exec
+8. NO emotional labels as descriptors. Not "cool contempt" or "authoritative satisfaction." I
+You MUST respond with valid JSON only. No markdown.
 {
-"scene_summary": "1-2 sentences. What is happening, what is at stake. Based only on what's "character_name": "Name of the character the actor is reading for",
-"character_objective": "One active verb phrase: what are they trying to DO to the other person? "stakes": "What happens if they fail at this objective? Stay concrete and text-based.",
+"scene_summary": "1-2 sentences. What is happening, what is at stake. Based only on what's
+"character_name": "Name of the character the actor is reading for",
+"character_objective": "One active verb phrase: what are they trying to DO to the other per
+"stakes": "What happens if they fail at this objective? Stay concrete and text-based.",
 "beats": [
 {
 "beat_number": 1,
-"title": "Short title — name the tactic shift",
-"description": "What tactic is the character using HERE? What changed from the previous "behavior": "What the character is DOING in this beat — described as an action, not a feeling.
-"effect": "How this lands on the other person. What does it do to them? e.g. 'Forces her "subtext": "What this line/section is doing tactically. Not what they secretly feel — what "key_words": ["word1", "word2"]
+"title": "Short title - name the tactic shift",
+"description": "What tactic is the character using HERE? What changed from the previous
+"behavior": "What the character is DOING in this beat - described as an action, not a f
+"effect": "How this lands on the other person. What does it do to them? e.g. 'Forces he
+"subtext": "What this line/section is doing tactically. Not what they secretly feel - w
+"key_words": ["word1", "word2"]
 }
 ],
 "acting_takes": {
-"grounded": "A naturalistic take. Specific physical direction: tempo, where tension lives "bold": "A take that commits harder to what's on the page. If the character is aggressive, "wildcard": "A surprising choice that's still TEXT-SUPPORTED. Not a different emotion — a },
+"grounded": "A naturalistic take. Specific physical direction: tempo, where tension lives
+"bold": "A take that commits harder to what's on the page. If the character is aggressive
+"wildcard": "A surprising choice that's still TEXT-SUPPORTED. Not a different emotion - a
+},
 "memorization": {
 "chunked_lines": [
-{"chunk_label": "Chunk 1: [context]", "lines": "Actual dialogue in breath groups (2-4 lines)"}
+{"chunk_label": "Chunk 1: [context]", "lines": "Actual dialogue in breath groups (2-4 l
 ],
 "cue_recall": [
 {"cue": "Last thing said before your line", "your_line": "Your character's exact line"}
@@ -629,45 +678,67 @@ QUICK_SYSTEM_PROMPT = """You are a working actor's script analyst. You break dow
 }
 }
 Return ONLY valid JSON."""
-DEEP_SYSTEM_PROMPT = """You are an elite scene analyst for working actors. You think like a director CORE PRINCIPLE: Observable first, interpretation second.
+DEEP_SYSTEM_PROMPT = """You are an elite scene analyst for working actors. You think like a d
+CORE PRINCIPLE: Observable first, interpretation second.
 - First: what is provably happening on the page (dialogue, actions, stage directions).
 - Then: what this behavior reveals about tactics and objectives.
 - NEVER: inferred guilt, shame, vulnerability, or emotional backstory that isn't in the text.
-RULES — apply these to every field:
-1. If a character is cruel, dominant, or manipulative ON THE PAGE — play that. Do not soften 2. Objectives are ACTIVE VERBS about what the character is doing to the other person. "To punish," 3. Beats are TACTIC SHIFTS. A new beat starts when the character changes their method of pursuing 4. Subtext describes what the line DOES, not what the character "really feels." A cruel line's 5. Physical direction must be specific and executable. "Jaw tight, words clipped, weight forward" 6. If casting notes or context are provided, integrate them as constraints on your analysis — 7. NO emotional labels as descriptors. Not "cool contempt," "authoritative satisfaction," or You MUST respond with valid JSON only. No markdown.
+RULES - apply these to every field:
+1. If a character is cruel, dominant, or manipulative ON THE PAGE - play that. Do not soften
+2. Objectives are ACTIVE VERBS about what the character is doing to the other person. "To pun
+3. Beats are TACTIC SHIFTS. A new beat starts when the character changes their method of purs
+4. Subtext describes what the line DOES, not what the character "really feels." A cruel line'
+5. Physical direction must be specific and executable. "Jaw tight, words clipped, weight forw
+6. If casting notes or context are provided, integrate them as constraints on your analysis -
+7. NO emotional labels as descriptors. Not "cool contempt," "authoritative satisfaction," or
+You MUST respond with valid JSON only. No markdown.
 {
 "scene_summary": "2-3 sentences. What is happening on the page? What is being fought over,
 "character_name": "Name of the character the actor is reading for",
-"character_objective": "Active verb phrase: what are they doing TO the other person through "stakes": "What happens if they fail? Based on what's observable in the text — not inferred "emotional_arc": "Track what the character is DOING from first line to last. Not what they "what_they_hide": "What is the character actively working to keep OFF the table? This must "beats": [
+"character_objective": "Active verb phrase: what are they doing TO the other person through
+"stakes": "What happens if they fail? Based on what's observable in the text - not inferred
+"emotional_arc": "Track what the character is DOING from first line to last. Not what they
+"what_they_hide": "What is the character actively working to keep OFF the table? This must
+"beats": [
 {
 "beat_number": 1,
 "title": "Name the tactic, not the topic",
-"description": "What tactic is the character deploying? What changed from the previous "behavior": "What the character is DOING in this beat — as an action verb. e.g. 'Dismisses "effect": "How this lands on the other person. What position does it put them in? e.g. "subtext_surface": "What the line appears to be saying.",
+"description": "What tactic is the character deploying? What changed from the previous
+"behavior": "What the character is DOING in this beat - as an action verb. e.g. 'Dismis
+"effect": "How this lands on the other person. What position does it put them in? e.g.
+"subtext_surface": "What the line appears to be saying.",
 "subtext_meaning": "What the line is tactically designed to DO to the other person.",
-"subtext_fear": "What happens if this tactic fails? What's the character trying to prevent? "key_words": ["word1", "word2"],
-"physical_life": "Specific body direction for this beat. Posture, breath, hands, weight, }
+"subtext_fear": "What happens if this tactic fails? What's the character trying to prev
+"key_words": ["word1", "word2"],
+"physical_life": "Specific body direction for this beat. Posture, breath, hands, weight
+}
 ],
 "acting_takes": {
-"grounded": "A naturalistic, text-faithful take. Direct the actor beat by beat: where to "bold": "A take that commits even further to what the text supports. If the character dominates, "wildcard": "A text-supported surprise. A different tactical read of the same objective that },
+"grounded": "A naturalistic, text-faithful take. Direct the actor beat by beat: where to
+"bold": "A take that commits even further to what the text supports. If the character dom
+"wildcard": "A text-supported surprise. A different tactical read of the same objective t
+},
 "memorization": {
 "chunked_lines": [
-{"chunk_label": "Chunk 1: [tactical context]", "lines": "2-4 lines of actual dialogue grouped ],
+{"chunk_label": "Chunk 1: [tactical context]", "lines": "2-4 lines of actual dialogue g
+],
 "cue_recall": [
-{"cue": "Last thing said before your line", "your_line": "Your character's exact response"}
+{"cue": "Last thing said before your line", "your_line": "Your character's exact respon
 ]
 },
 "self_tape_tips": {
 "framing": "Specific framing for this scene. What the camera needs to catch.",
 "eyeline": "Where to look, when to break, and the tactical reason for each.",
-"tone_energy": "Energy 1-10 with beat-by-beat adjustments. Where to start, peak, and land."
+"tone_energy": "Energy 1-10 with beat-by-beat adjustments. Where to start, peak, and land
 }
 }
 Return ONLY valid JSON."""
-REGENERATE_TAKES_PROMPT = """Acting coach. 3 NEW takes — specific, physical, immediately playable. Return ONLY valid JSON:
+REGENERATE_TAKES_PROMPT = """Acting coach. 3 NEW takes - specific, physical, immediately play
+Return ONLY valid JSON:
 {
 "acting_takes": {
 "grounded": "Naturalistic: physicality, tempo, breath. Director's whisper.",
-"bold": "Pushes the scene — not louder, DIFFERENT. Specific anchor + physical life.",
+"bold": "Pushes the scene - not louder, DIFFERENT. Specific anchor + physical life.",
 "wildcard": "Unexpected choice. Specific, committed, surprising."
 }
 }"""
@@ -691,35 +762,41 @@ except json.JSONDecodeError:
 pass
 raise ValueError("Could not parse JSON from response")
 async def analyze_with_gpt(text=None, image_base64=None, context=None, mode="quick"):
-"""Core GPT call. mode='quick' truncates to ~2500 chars, mode='deep' allows ~8000. Returns api_key = os.environ.get('OPENAI_API_KEY')
+"""Core GPT call. mode='quick' truncates to ~2500 chars, mode='deep' allows ~8000. api_key = os.environ.get('OPENAI_API_KEY')
 if not api_key:
 raise Exception("STAGE:gpt_init | LLM API key not configured in environment")
+Return
 is_deep = mode == "deep"
 max_chars = 8000 if is_deep else 2500
 system_prompt = DEEP_SYSTEM_PROMPT if is_deep else QUICK_SYSTEM_PROMPT
 if text and len(text) > max_chars:
-text = text[:max_chars] + f"\n\n[...truncated — first ~{max_chars // 500} pages used]"
+text = text[:max_chars] + f"\n\n[...truncated - first ~{max_chars // 500} pages used]
 logger.info(f"Truncated input text to {max_chars} chars (mode={mode})")
 try:
 client = AsyncOpenAI(api_key=api_key)
 except Exception as e:
 raise Exception(f"STAGE:gpt_init | Failed to create OpenAI client: {e}")
 try:
+provid
+analyz
 if image_base64:
 if is_deep:
-vision_prompt = "Extract ALL text from this audition sides image. Then provide else:
-vision_prompt = "Extract ALL text from this audition sides image, then analyze if context:
+vision_prompt = "Extract ALL text from this audition sides image. Then else:
+vision_prompt = "Extract ALL text from this audition sides image, then if context:
 vision_prompt = f"{context}\n{vision_prompt}"
 messages = [
 {"role": "system", "content": system_prompt},
 {"role": "user", "content": [
 {"type": "text", "text": vision_prompt},
-{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_]}
+{"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{imag
+]}
 ]
 else:
 if is_deep:
-prompt = f"Provide a DEEP acting breakdown of these audition sides. Focus on else:
-prompt = f"Analyze these audition sides and provide a full acting breakdown:\messages = [
+prompt = f"Provide a DEEP acting breakdown of these audition sides. Focus on
+else:
+prompt = f"Analyze these audition sides and provide a full acting breakdown:\
+messages = [
 {"role": "system", "content": system_prompt},
 {"role": "user", "content": prompt}
 ]
@@ -731,15 +808,17 @@ response = raw.choices[0].message.content
 except Exception as e:
 err_str = str(e).lower()
 if "rate" in err_str and "limit" in err_str:
-raise Exception("STAGE:gpt_call | Rate limit reached. Please wait a moment and try raise Exception(f"STAGE:gpt_call | GPT request failed: {e}")
+raise Exception("STAGE:gpt_call | Rate limit reached. Please wait a moment raise Exception(f"STAGE:gpt_call | GPT request failed: {e}")
+and tr
 if not response or not response.strip():
 raise Exception("STAGE:gpt_call | GPT returned empty response")
 try:
 result = parse_json_response(response)
 return result, response
 except (ValueError, json.JSONDecodeError):
-raise Exception(f"STAGE:gpt_parse | Could not parse JSON from GPT response (first 300 # ============================================================
-# PROJECT CRUD (Phase 1 — Audition-First MVP)
+raise Exception(f"STAGE:gpt_parse | Could not parse JSON from GPT response (first 300
+# ============================================================
+# PROJECT CRUD (Phase 1 - Audition-First MVP)
 # ============================================================
 class CreateProjectRequest(BaseModel):
 title: str
@@ -781,8 +860,8 @@ cursor = db.projects.find({}, {"_id": 0}).sort("updated_at", -1)
 projects = await cursor.to_list(length=100)
 # Add document count for each project
 for p in projects:
-p["document_count"] = await db.documents.count_documents({"project_id": p["id"]})
 return projects
+p["document_count"] = await db.documents.count_documents({"project_id": p["id"]})
 @api_router.get("/projects/{project_id}")
 async def get_project(project_id: str):
 project = await db.projects.find_one({"id": project_id}, {"_id": 0})
@@ -795,7 +874,8 @@ return project
 @api_router.put("/projects/{project_id}")
 async def update_project(project_id: str, request: UpdateProjectRequest):
 updates = {}
-for field in ["title", "role_name", "mode", "audition_date", "audition_time", "audition_format", val = getattr(request, field, None)
+for field in ["title", "role_name", "mode", "audition_date", "audition_time", "audition_f
+val = getattr(request, field, None)
 if val is not None:
 updates[field] = val.strip() if isinstance(val, str) else val
 if not updates:
@@ -823,7 +903,7 @@ await db.documents.delete_many({"project_id": project_id})
 await db.projects.delete_one({"id": project_id})
 return {"status": "deleted", "project_id": project_id}
 # ============================================================
-# DOCUMENT UPLOAD & MANAGEMENT (Phase 1 — Feature #2)
+# DOCUMENT UPLOAD & MANAGEMENT (Phase 1 - Feature #2)
 # ============================================================
 UPLOAD_DIR = os.path.join(os.path.dirname(__file__), "uploads")
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -848,7 +928,8 @@ if re.match(r'^EPISODE\s|^EP[\.\s]\d|^SCENE\s|^ACT\s', s, re.IGNORECASE):
 scores["sides"] += 2
 # Dialogue pattern: CAPS line followed by lowercase line
 for i in range(min(len(non_blank) - 1, 60)):
-if re.match(r'^[A-Z]{2,}', non_blank[i]) and non_blank[i + 1] and non_blank[i + 1][0].scores["sides"] += 1
+if re.match(r'^[A-Z]{2,}', non_blank[i]) and non_blank[i + 1] and non_blank[i + 1][0]
+scores["sides"] += 1
 # INSTRUCTIONS signals
 instruction_terms = [
 "self-tape", "selftape", "self tape", "callback", "deadline", "submit",
@@ -890,7 +971,7 @@ file: UploadFile = File(None),
 pasted_text: Optional[str] = Form(None),
 doc_type: Optional[str] = Form("unknown"),
 ):
-"""Upload a document (PDF, image) or paste text. Extracts text and attaches to project."""
+"""Upload a document (PDF, image) or paste text. Extracts text and attaches to project.""
 # Verify project exists
 project = await db.projects.find_one({"id": project_id}, {"_id": 0})
 if not project:
@@ -947,16 +1028,21 @@ for page_num, page_jpeg in enumerate(page_images):
 b64 = base64.b64encode(page_jpeg).decode('utf-8')
 try:
 ocr_client = AsyncOpenAI(api_key=api_key)
-raw_ocr = await asyncio.wait_for(ocr_client.chat.completions.model="gpt-4o",
+raw_ocr = await asyncio.wait_for(ocr_client.chat.completions.
+model="gpt-4o",
 messages=[
-{"role": "system", "content": "Extract ALL text from {"role": "user", "content": [
-{"type": "text", "text": "Extract all text from this {"type": "image_url", "image_url": {"url": f"data:]}
+{"role": "system", "content": "Extract ALL text from
+{"role": "user", "content": [
+{"type": "text", "text": "Extract all text {"type": "image_url", "image_url": {"url": from t
+f"data
+]}
 ]
 ), timeout=60)
 page_text = raw_ocr.choices[0].message.content
 all_page_text.append(page_text.strip())
 except Exception as e:
-logger.warning(f"[doc-upload] Page {page_num+1} OCR failed: {all_page_text.append(f"[Page {page_num+1}: OCR failed]")
+logger.warning(f"[doc-upload] Page {page_num+1} OCR failed: {
+all_page_text.append(f"[Page {page_num+1}: OCR failed]")
 original_text = "\n\n".join(all_page_text)
 except Exception as e:
 logger.error(f"[doc-upload] PDF OCR fallback failed: {e}")
@@ -971,21 +1057,25 @@ ocr_client = AsyncOpenAI(api_key=api_key)
 raw_ocr = await asyncio.wait_for(ocr_client.chat.completions.create(
 model="gpt-4o",
 messages=[
-{"role": "system", "content": "Extract ALL text from this image exactly {"role": "user", "content": [
-{"type": "text", "text": "Extract all text from this script page."},
-{"type": "image_url", "image_url": {"url": f"data:image/jpeg;]}
+{"role": "system", "content": "Extract ALL text from this image e
+{"role": "user", "content": [
+{"type": "text", "text": "Extract all text from this script p
+{"type": "image_url", "image_url": {"url": f"data:image/jpeg;
+]}
 ]
 ), timeout=60)
 original_text = raw_ocr.choices[0].message.content.strip()
 except Exception as e:
 logger.error(f"[doc-upload] Image OCR failed: {e}")
-raise HTTPException(status_code=500, detail=f"Could not extract text from image: else:
+raise HTTPException(status_code=500, detail=f"Could not extract text from ima
+else:
 # Try to read as plain text
 extraction_method = "text"
 try:
 original_text = contents.decode("utf-8").strip()
 except UnicodeDecodeError:
-raise HTTPException(status_code=400, detail="Unsupported file type. Upload a elif pasted_text and pasted_text.strip():
+raise HTTPException(status_code=400, detail="Unsupported file type. Upload a
+elif pasted_text and pasted_text.strip():
 # Pasted text path
 filename = "pasted_text.txt"
 original_text = pasted_text.strip()
@@ -994,7 +1084,8 @@ else:
 raise HTTPException(status_code=400, detail="Provide a file or pasted text.")
 # Validate we got text
 if len(original_text) < 5:
-raise HTTPException(status_code=400, detail="Could not extract enough text. Try a clearer # Validate doc_type — auto-classify if unknown
+raise HTTPException(status_code=400, detail="Could not extract enough text. Try a cle
+# Validate doc_type - auto-classify if unknown
 valid_types = {"sides", "instructions", "wardrobe", "notes", "reference", "unknown"}
 if doc_type not in valid_types:
 doc_type = "unknown"
@@ -1025,7 +1116,8 @@ await db.projects.update_one(
 "$set": {"updated_at": datetime.now(timezone.utc).isoformat()},
 },
 )
-logger.info(f"[doc-upload] Saved doc {doc_id[:12]} for project {project_id[:12]}: {filename}, return doc
+logger.info(f"[doc-upload] Saved doc {doc_id[:12]} for project {project_id[:12]}: {filena
+return doc
 @api_router.get("/projects/{project_id}/documents")
 async def list_project_documents(project_id: str):
 """List all documents for a project."""
@@ -1050,7 +1142,8 @@ async def update_document_type(doc_id: str, request: dict):
 new_type = request.get("type", "unknown")
 valid_types = {"sides", "instructions", "wardrobe", "notes", "reference", "unknown"}
 if new_type not in valid_types:
-raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.join(result = await db.documents.update_one({"id": doc_id}, {"$set": {"type": new_type}})
+raise HTTPException(status_code=400, detail=f"Invalid type. Must be one of: {', '.joi
+result = await db.documents.update_one({"id": doc_id}, {"$set": {"type": new_type}})
 if result.matched_count == 0:
 raise HTTPException(status_code=404, detail="Document not found")
 return {"status": "ok", "type": new_type}
@@ -1076,7 +1169,7 @@ os.remove(file_path)
 await db.documents.delete_one({"id": doc_id})
 return {"status": "deleted", "doc_id": doc_id}
 # ============================================================
-# DOCUMENT CLEANING & CONFIRMATION (Phase 1 — Feature #4)
+# DOCUMENT CLEANING & CONFIRMATION (Phase 1 - Feature #4)
 # ============================================================
 @api_router.post("/documents/{doc_id}/clean")
 async def clean_document(doc_id: str):
@@ -1152,7 +1245,7 @@ await db.projects.update_one(
 )
 return {"status": "ok", "confirmed": confirmed}
 # ============================================================
-# CHARACTER DETECTION & SELECTION (Phase 1 — Feature #5)
+# CHARACTER DETECTION & SELECTION (Phase 1 - Feature #5)
 # ============================================================
 def detect_characters_from_text(text: str) -> dict:
 """Scan text for ALL CAPS character names (screenplay dialogue cues).
@@ -1217,7 +1310,7 @@ docs = await db.documents.find(
 if not docs:
 raise HTTPException(
 status_code=400,
-detail="No confirmed documents. Confirm your documents before detecting characters.",
+detail="No confirmed documents. Confirm your documents before detecting character
 )
 # Aggregate character counts across all confirmed docs
 total_counts = {}
@@ -1234,13 +1327,14 @@ characters = [
 {"name": name, "line_count": count}
 for name, count in ranked
 ]
-logger.info(f"[DETECT] Found {len(characters)} characters in project {project_id[:12]} from return {
+logger.info(f"[DETECT] Found {len(characters)} characters in project {project_id[:12]} fr
+return {
 "project_id": project_id,
 "characters": characters,
 "confirmed_doc_count": len(docs),
 }
 # ============================================================
-# LINE EXTRACTION + REHEARSAL (Phase 1 — Feature #6)
+# LINE EXTRACTION + REHEARSAL (Phase 1 - Feature #6)
 # ============================================================
 def extract_dialogue_blocks(text: str) -> list:
 """Extract all dialogue blocks from script text.
@@ -1290,7 +1384,7 @@ if peek < len(lines):
 nxt = lines[peek].strip()
 if is_char_name(nxt):
 break
-if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO)', nxt, re.IGNORECASE):
+if re.match(r'^\d*(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO)', nxt, re.IGNOR
 break
 break
 if is_char_name(dl):
@@ -1307,8 +1401,8 @@ blocks.append({
 "speaker": speaker,
 "text": " ".join(dialogue),
 "line_idx": i,
-})
 else:
+})
 i += 1
 return blocks
 def build_cue_line_pairs(text: str, character_name: str) -> list:
@@ -1347,7 +1441,8 @@ if not project:
 raise HTTPException(status_code=404, detail="Project not found")
 character = project.get("selected_character")
 if not character:
-raise HTTPException(status_code=400, detail="No character selected. Select a character # Get confirmed side documents only
+raise HTTPException(status_code=400, detail="No character selected. Select a characte
+# Get confirmed side documents only
 docs = await db.documents.find(
 {"project_id": project_id, "is_confirmed": True, "type": "sides"},
 {"_id": 0},
@@ -1406,7 +1501,8 @@ result_scenes.append({
 for i, p in enumerate(pairs)
 ],
 })
-logger.info(f"[EXTRACT] {total_lines} lines for '{character}' across {len(result_scenes)} return {
+logger.info(f"[EXTRACT] {total_lines} lines for '{character}' across {len(result_scenes)}
+return {
 "project_id": project_id,
 "character": character,
 "total_lines": total_lines,
@@ -1417,8 +1513,8 @@ logger.info(f"[EXTRACT] {total_lines} lines for '{character}' across {len(result
 # CONTENT-TYPE DETECTION + BREAKDOWN EXTRACTION
 # ============================================================
 def detect_content_type(text: str) -> str:
-"""Detect whether confirmed text is a 'script' (has dialogue) or 'breakdown' (casting/instructions).
-Looks for actual back-and-forth dialogue structure — not just ALL CAPS labels.
+"""Detect whether confirmed text is a 'script' (has dialogue) or 'breakdown' (casting/ins
+Looks for actual back-and-forth dialogue structure - not just ALL CAPS labels.
 A dialogue exchange = Speaker A line(s) followed by Speaker B line(s).
 Returns: 'script' | 'breakdown'
 """
@@ -1465,14 +1561,15 @@ if name in skip_exact:
 return False
 alpha = re.sub(r'[\s\.\'\-]', '', name)
 return len(alpha) >= 2
-# Count dialogue exchanges: speaker A with dialogue, followed later by speaker B with dialogue
+# Count dialogue exchanges: speaker A with dialogue, followed later by speaker B with dia
 lines = text.split("\n")
 speakers_with_dialogue = []
 i = 0
 while i < len(lines):
 stripped = lines[i].strip()
 if is_dialogue_speaker(stripped):
-speaker = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', stripped).group(# Check if next non-blank line(s) look like dialogue (not another label or description)
+speaker = re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', stripped).group
+# Check if next non-blank line(s) look like dialogue (not another label or descri
 j = i + 1
 has_dialogue = False
 while j < len(lines) and j < i + 5:
@@ -1480,13 +1577,13 @@ dl = lines[j].strip()
 if not dl:
 j += 1
 continue
-# Real dialogue is conversational: short-to-medium lines, not long descriptions
+# Real dialogue is conversational: short-to-medium lines, not long descriptio
 # Breakdown descriptions are typically 80+ chars of descriptive text
 if not is_dialogue_speaker(dl) and not dl.isupper():
-# If the line is very long (80+ chars) it's likely a description, not dialogue
+# If the line is very long (80+ chars) it's likely a description, not dia
 if len(dl) > 80:
 break
-# If it reads like a label followed by content (e.g. "Late 20s, Latino...")
+# If it reads like a label followed by content (e.g. "Late 20s, Latino...
 if re.match(r'^(Late|Early|Mid)\s+\d', dl, re.IGNORECASE):
 break
 # Looks like actual dialogue
@@ -1506,7 +1603,8 @@ for sp in speakers_with_dialogue:
 if prev_speaker and sp != prev_speaker:
 exchanges += 1
 prev_speaker = sp
-logger.info(f"[DETECT] {len(unique_speakers)} speakers, {exchanges} exchanges, {len(speakers_# Need at least 2 speakers AND at least 1 exchange for "script"
+logger.info(f"[DETECT] {len(unique_speakers)} speakers, {exchanges} exchanges, {len(speak
+# Need at least 2 speakers AND at least 1 exchange for "script"
 if len(unique_speakers) >= 2 and exchanges >= 1:
 return "script"
 return "breakdown"
@@ -1570,7 +1668,7 @@ content_type = detect_content_type(full_text)
 # Store on project
 await db.projects.update_one(
 {"id": project_id},
-{"$set": {"content_type": content_type, "updated_at": datetime.now(timezone.utc).isoformat()}},
+{"$set": {"content_type": content_type, "updated_at": datetime.now(timezone.utc).isof
 )
 logger.info(f"[DETECT] Project {project_id[:12]} content_type={content_type}")
 return {"project_id": project_id, "content_type": content_type}
@@ -1595,16 +1693,21 @@ return {
 "full_text": full_text,
 }
 # ============================================================
-# QUICK COACH — OPTIONAL GPT COACHING (Feature: Quick Coach)
+# QUICK COACH - OPTIONAL GPT COACHING (Feature: Quick Coach)
 # ============================================================
-QUICK_COACH_PROMPT = """You are a working actor's audition coach. You give fast, specific, playable Given a script excerpt and character name (and optionally casting/instruction notes), return RULES:
-1. Be specific and actionable — not vague emotional labels.
+QUICK_COACH_PROMPT = """You are a working actor's audition coach. You give fast, specific, pl
+Given a script excerpt and character name (and optionally casting/instruction notes), return
+RULES:
+1. Be specific and actionable - not vague emotional labels.
 2. Base everything on the TEXT. If casting notes exist, factor them in.
-3. "How to Play It" should be a director's whisper: tempo, physicality, energy level, specific 4. Takes must be DISTINCT from each other — different tactics, not different emotions.
+3. "How to Play It" should be a director's whisper: tempo, physicality, energy level, specifi
+4. Takes must be DISTINCT from each other - different tactics, not different emotions.
 5. Keep it concise. An actor should read this in 30 seconds.
 You MUST respond with valid JSON only. No markdown.
 {
-"casting_intent": "1-2 sentences. What casting is actually looking for based on the material "how_to_play_it": "2-3 sentences. Specific direction: energy level (1-10), tempo, where tension "what_to_avoid": "1-2 sentences. The most common trap an actor would fall into with this material.",
+"casting_intent": "1-2 sentences. What casting is actually looking for based on the materia
+"how_to_play_it": "2-3 sentences. Specific direction: energy level (1-10), tempo, where ten
+"what_to_avoid": "1-2 sentences. The most common trap an actor would fall into with this ma
 "takes": [
 {
 "label": "Short label (2-3 words)",
@@ -1621,30 +1724,40 @@ You MUST respond with valid JSON only. No markdown.
 ]
 }
 Return ONLY valid JSON."""
-BREAKDOWN_COACH_PROMPT = """You are a working actor's audition coach. You help actors interpret Given a casting breakdown and any instruction notes, provide fast behavioral coaching — what RULES:
-1. casting_intent must be ONE punchy sentence. Not a paragraph. Something an actor reads in 2 2. how_to_play_it must be 3-5 SHORT bullet points (each one line). Physical, actionable directives 3. format_note: If the breakdown indicates no dialogue, improv, slate-only, or any specific format 4. what_to_avoid: One sharp sentence. The trap.
-5. Takes must be genuinely DISTINCT — different humans walking into the room, not volume variations.
+BREAKDOWN_COACH_PROMPT = """You are a working actor's audition coach. You help actors interpr
+Given a casting breakdown and any instruction notes, provide fast behavioral coaching - what
+RULES:
+1. casting_intent must be ONE punchy sentence. Not a paragraph. Something an actor reads in 2
+2. how_to_play_it must be 3-5 SHORT bullet points (each one line). Physical, actionable direc
+3. format_note: If the breakdown indicates no dialogue, improv, slate-only, or any specific f
+4. what_to_avoid: One sharp sentence. The trap.
+5. Takes must be genuinely DISTINCT - different humans walking into the room, not volume vari
 You MUST respond with valid JSON only. No markdown.
 {
 "casting_intent": "One punchy sentence. What they actually want. Be blunt.",
-"how_to_play_it": "- Bullet 1: specific physical directive\\n- Bullet 2: breath/tempo/energy\\"format_note": "One line about format if relevant (no dialogue, improv, etc). Empty string "what_to_avoid": "One sentence. The common trap.",
+"how_to_play_it": "- Bullet 1: specific physical directive\\n- Bullet 2: breath/tempo/energ
+"format_note": "One line about format if relevant (no dialogue, improv, etc). Empty string
+"what_to_avoid": "One sentence. The common trap.",
 "takes": [
 {
 "label": "2-3 word label",
-"direction": "One sentence. A specific person walking into the room — physicality, rhythm, },
+"direction": "One sentence. A specific person walking into the room - physicality, rhyt
+},
 {
 "label": "2-3 word label",
-"direction": "A completely different human. Not louder/softer — different center of gravity, },
+"direction": "A completely different human. Not louder/softer - different center of gra
+},
 {
 "label": "2-3 word label",
-"direction": "The unexpected read. Still honors the breakdown but reframes the whole energy."
+"direction": "The unexpected read. Still honors the breakdown but reframes the whole en
 }
 ]
 }
 Return ONLY valid JSON."""
 @api_router.post("/projects/{project_id}/quick-coach")
 async def quick_coach(project_id: str, request: dict = None):
-"""Generate coaching notes for the selected character. Uses ONE GPT call, cached at project project = await db.projects.find_one({"id": project_id}, {"_id": 0})
+"""Generate coaching notes for the selected character. Uses ONE GPT call, cached at proje
+project = await db.projects.find_one({"id": project_id}, {"_id": 0})
 if not project:
 raise HTTPException(status_code=404, detail="Project not found")
 character = project.get("selected_character")
@@ -1668,11 +1781,13 @@ sides_docs = await db.documents.find(
 if not sides_docs:
 raise HTTPException(status_code=400, detail="No confirmed documents found.")
 # Build script text
-script_text = "\n\n".join(d.get("cleaned_text", "") for d in sides_docs if d.get("cleaned_if not script_text.strip():
+script_text = "\n\n".join(d.get("cleaned_text", "") for d in sides_docs if d.get("cleaned
+if not script_text.strip():
 raise HTTPException(status_code=400, detail="No text in confirmed documents.")
 # Gather instruction/wardrobe/notes docs for context
 context_docs = await db.documents.find(
-{"project_id": project_id, "is_confirmed": True, "type": {"$in": ["instructions", "wardrobe", {"_id": 0},
+{"project_id": project_id, "is_confirmed": True, "type": {"$in": ["instructions", "wa
+{"_id": 0},
 ).to_list(length=50)
 context_text = ""
 for cd in context_docs:
@@ -1687,7 +1802,7 @@ if len(context_text) > 2000:
 context_text = context_text[:2000] + "\n\n[...truncated]"
 # Select prompt based on content_type
 content_type = project.get("content_type", "script")
-coach_prompt = BREAKDOWN_COACH_PROMPT if content_type == "breakdown" else QUICK_COACH_PROMPT
+coach_prompt = BREAKDOWN_COACH_PROMPT if content_type == "breakdown" else QUICK_COACH_PRO
 # Build prompt
 if content_type == "breakdown":
 user_prompt = f"Character/Role: {character}\n\nCASTING BREAKDOWN:\n{script_text}"
@@ -1706,8 +1821,8 @@ model="gpt-4o",
 messages=[
 {"role": "system", "content": coach_prompt},
 {"role": "user", "content": user_prompt}
-]
 )
+]
 response = raw.choices[0].message.content
 if not response or not response.strip():
 raise Exception("Empty response from GPT")
@@ -1715,7 +1830,8 @@ result = parse_json_response(response)
 except Exception as e:
 err_str = str(e).lower()
 if "budget" in err_str and "exceeded" in err_str:
-raise HTTPException(status_code=402, detail="LLM budget exceeded. Add balance at logger.error(f"[COACH] GPT call failed: {e}")
+raise HTTPException(status_code=402, detail="LLM budget exceeded. Add balance at
+logger.error(f"[COACH] GPT call failed: {e}")
 raise HTTPException(status_code=500, detail=f"Coaching generation failed: {e}")
 # Cache on project
 coach_data = {
@@ -1729,15 +1845,20 @@ coach_data = {
 }
 await db.projects.update_one(
 {"id": project_id},
-{"$set": {"coach_cache": coach_data, "updated_at": datetime.now(timezone.utc).isoformat()}},
+{"$set": {"coach_cache": coach_data, "updated_at": datetime.now(timezone.utc).isoform
 )
-logger.info(f"[COACH] Generated coaching for '{character}' in project {project_id[:12]} (return coach_data
+logger.info(f"[COACH] Generated coaching for '{character}' in project {project_id[:12]} (
+return coach_data
 # ============================================================
 # PREP GENERATION (Feature #10)
 # ============================================================
-PREP_GENERATION_PROMPT = """You are an actor's audition prep assistant. Given a project's script/RULES:
-1. Every item must be SPECIFIC to this audition — no generic advice.
-2. Wardrobe suggestions must be derived from the text (character description, setting, tone, 3. Self-tape setup must reflect any instruction docs. If none exist, infer from the material's 4. Action items are the 5-7 most important things to do before the audition — ordered by priority. 5. Keep everything scannable. Short lines. No paragraphs.
+PREP_GENERATION_PROMPT = """You are an actor's audition prep assistant. Given a project's scr
+RULES:
+1. Every item must be SPECIFIC to this audition - no generic advice.
+2. Wardrobe suggestions must be derived from the text (character description, setting, tone,
+3. Self-tape setup must reflect any instruction docs. If none exist, infer from the material'
+4. Action items are the 5-7 most important things to do before the audition - ordered by prio
+5. Keep everything scannable. Short lines. No paragraphs.
 You MUST respond with valid JSON only. No markdown.
 {
 "wardrobe": [
@@ -1787,7 +1908,8 @@ d.get("cleaned_text", "") for d in all_docs
 if d.get("cleaned_text") and d.get("type") in ("sides", "unknown")
 )
 if not script_text.strip():
-script_text = "\n\n".join(d.get("cleaned_text", "") for d in all_docs if d.get("cleaned_# Instruction/wardrobe/notes context
+script_text = "\n\n".join(d.get("cleaned_text", "") for d in all_docs if d.get("clean
+# Instruction/wardrobe/notes context
 context_parts = []
 for d in all_docs:
 if d.get("type") in ("instructions", "wardrobe", "notes") and d.get("cleaned_text"):
@@ -1799,7 +1921,8 @@ context_text = "\n\n".join(context_parts)
 if len(context_text) > 2000:
 context_text = context_text[:2000] + "\n\n[...truncated]"
 content_type = project.get("content_type", "script")
-user_prompt = f"Project: {project.get('title', '')}\nCharacter: {character}\nContent type: if content_type == "breakdown":
+user_prompt = f"Project: {project.get('title', '')}\nCharacter: {character}\nContent type
+if content_type == "breakdown":
 user_prompt += f"CASTING BREAKDOWN:\n{script_text}"
 else:
 user_prompt += f"SCRIPT:\n{script_text}"
@@ -1825,7 +1948,8 @@ result = parse_json_response(response)
 except Exception as e:
 err_str = str(e).lower()
 if "budget" in err_str and "exceeded" in err_str:
-raise HTTPException(status_code=402, detail="LLM budget exceeded. Add balance at logger.error(f"[PREP] GPT call failed: {e}")
+raise HTTPException(status_code=402, detail="LLM budget exceeded. Add balance at
+logger.error(f"[PREP] GPT call failed: {e}")
 raise HTTPException(status_code=500, detail=f"Prep generation failed: {e}")
 # Cache on project
 prep_data = {
@@ -1837,17 +1961,17 @@ prep_data = {
 }
 await db.projects.update_one(
 {"id": project_id},
-{"$set": {"prep_cache": prep_data, "updated_at": datetime.now(timezone.utc).isoformat()}},
+{"$set": {"prep_cache": prep_data, "updated_at": datetime.now(timezone.utc).isoformat
 )
 logger.info(f"[PREP] Generated prep for '{character}' in project {project_id[:12]} (1 GPT
 return prep_data
 # ============================================================
-# LINE REVIEW — USER-EDITABLE LINES (Feature #6.5)
+# LINE REVIEW - USER-EDITABLE LINES (Feature #6.5)
 # ============================================================
 @api_router.put("/projects/{project_id}/reviewed-lines")
 async def save_reviewed_lines(project_id: str, request: dict):
 """Save user-reviewed/edited line pairs. These become the source of truth for rehearsal.
-Expects {scenes: [{scene_number, heading, line_pairs: [{cue_speaker, cue_text, line_text}]}]}"""
+Expects {scenes: [{scene_number, heading, line_pairs: [{cue_speaker, cue_text, line_text}
 project = await db.projects.find_one({"id": project_id}, {"_id": 0})
 if not project:
 raise HTTPException(status_code=404, detail="Project not found")
@@ -1886,7 +2010,8 @@ await db.projects.update_one(
 "updated_at": datetime.now(timezone.utc).isoformat(),
 }},
 )
-logger.info(f"[REVIEW] Saved {total} reviewed lines across {len(cleaned_scenes)} scenes for return {"status": "ok", "total_lines": total, "scene_count": len(cleaned_scenes)}
+logger.info(f"[REVIEW] Saved {total} reviewed lines across {len(cleaned_scenes)} scenes f
+return {"status": "ok", "total_lines": total, "scene_count": len(cleaned_scenes)}
 @api_router.get("/projects/{project_id}/reviewed-lines")
 async def get_reviewed_lines(project_id: str):
 """Get user-reviewed lines for a project. Returns null if not yet reviewed."""
@@ -1914,12 +2039,14 @@ Hit this from the browser to see exactly what's working and what isn't."""
 results = {}
 # 1. Check LLM key
 api_key = os.environ.get('OPENAI_API_KEY')
-results["llm_key"] = {"ok": bool(api_key), "value": f"{api_key[:8]}..." if api_key else "# 2. LLM readiness (no GPT call — saves credits)
-results["gpt_ready"] = {"ok": bool(api_key), "note": "Key present, no test call (cost savings)"}
+results["llm_key"] = {"ok": bool(api_key), "value": f"{api_key[:8]}..." if api_key else "
+# 2. LLM readiness (no GPT call - saves credits)
+results["gpt_ready"] = {"ok": bool(api_key), "note": "Key present, no test call (cost sav
 # 2b. Cache stats
 try:
 cache_count = await db.breakdown_cache.count_documents({})
-results["cache"] = {"ok": True, "cached_breakdowns": cache_count, "version": CACHE_VERSION, except Exception as e:
+results["cache"] = {"ok": True, "cached_breakdowns": cache_count, "version": CACHE_VE
+except Exception as e:
 results["cache"] = {"ok": False, "error": str(e)}
 # 3. Test MongoDB
 try:
@@ -1958,8 +2085,8 @@ all_ok = all(r.get("ok") for r in results.values())
 return {"all_ok": all_ok, "stages": results}
 @api_router.post("/extract-text")
 async def extract_text_from_file(file: UploadFile = File(...)):
-"""Extract text from a PDF or image file without analyzing it. Used by Full Script mode."""
-try:
+"""Extract text from a PDF or image file without analyzing it. Used by Full Script try:
+mode."
 contents = await file.read()
 except Exception as e:
 raise HTTPException(status_code=400, detail=f"Failed to read file: {e}")
@@ -1968,7 +2095,8 @@ raise HTTPException(status_code=400, detail="File must be under 20MB.")
 if len(contents) == 0:
 raise HTTPException(status_code=400, detail="File is empty.")
 file_type = detect_file_type(file.content_type, file.filename, contents)
-logger.info(f"[extract-text] File: {file.filename}, type: {file_type}, size: {len(contents)/extracted_text = ""
+logger.info(f"[extract-text] File: {file.filename}, type: {file_type}, size: {len(content
+extracted_text = ""
 if file_type == "pdf":
 try:
 from PyPDF2 import PdfReader
@@ -1978,7 +2106,8 @@ page_text = page.extract_text()
 if page_text:
 extracted_text += page_text + "\n"
 extracted_text = extracted_text.strip()
-logger.info(f"[extract-text] PDF text: {len(extracted_text)} chars, {len(pdf_reader.except Exception as e:
+logger.info(f"[extract-text] PDF text: {len(extracted_text)} chars, {len(pdf_read
+except Exception as e:
 logger.error(f"[extract-text] PDF text extraction failed: {e}")
 if len(extracted_text) < 30:
 logger.info("[extract-text] PDF text too short, using Vision OCR")
@@ -1997,14 +2126,16 @@ ocr_client2 = AsyncOpenAI(api_key=api_key)
 raw2 = await asyncio.wait_for(ocr_client2.chat.completions.create(
 model="gpt-4o",
 messages=[
-{"role": "system", "content": "Extract ALL text from this image exactly {"role": "user", "content": [
-{"type": "text", "text": "Extract all text from this script page."},
-{"type": "image_url", "image_url": {"url": f"data:image/jpeg;]}
+{"role": "system", "content": "Extract ALL text from this image e
+{"role": "user", "content": [
+{"type": "text", "text": "Extract all text from this script p
+{"type": "image_url", "image_url": {"url": f"data:image/jpeg;
+]}
 ]
 ), timeout=60)
 page_text = raw2.choices[0].message.content
 all_page_text.append(page_text.strip())
-logger.info(f"[extract-text] Page {page_num+1} OCR: {len(page_text)} chars")
+logger.info(f"[extract-text] Page {page_num+1} OCR: {len(page_text)} char
 except Exception as e:
 logger.warning(f"[extract-text] Page {page_num+1} OCR failed: {e}")
 all_page_text.append(f"[Page {page_num+1}: OCR failed]")
@@ -2023,7 +2154,8 @@ ocr_client3 = AsyncOpenAI(api_key=api_key)
 raw3 = await asyncio.wait_for(ocr_client3.chat.completions.create(
 model="gpt-4o",
 messages=[
-{"role": "system", "content": "Extract ALL text from this image exactly as {"role": "user", "content": [
+{"role": "system", "content": "Extract ALL text from this image exactly a
+{"role": "user", "content": [
 {"type": "text", "text": "Extract all text from this script page."},
 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{
 ]}
@@ -2033,9 +2165,10 @@ extracted_text = raw3.choices[0].message.content.strip()
 except Exception as e:
 raise HTTPException(status_code=500, detail=f"OCR failed: {e}")
 else:
-raise HTTPException(status_code=400, detail="Unsupported file type. Upload a PDF or image.")
+raise HTTPException(status_code=400, detail="Unsupported file type. Upload a PDF or i
 if len(extracted_text) < 10:
-raise HTTPException(status_code=400, detail="Could not extract enough text from this logger.info(f"[extract-text] Complete: {len(extracted_text)} chars extracted")
+raise HTTPException(status_code=400, detail="Could not extract enough text from this
+logger.info(f"[extract-text] Complete: {len(extracted_text)} chars extracted")
 return {"text": extracted_text, "chars": len(extracted_text)}
 @api_router.post("/analyze/text")
 async def analyze_text(request: AnalyzeTextRequest):
@@ -2043,11 +2176,12 @@ stages = [] # track what happened at each stage
 if not request.text.strip():
 raise HTTPException(status_code=400, detail="Text cannot be empty")
 if len(request.text.strip()) < 10:
-raise HTTPException(status_code=400, detail="Please provide at least a few lines of dialogue")
+raise HTTPException(status_code=400, detail="Please provide at least a few lines of d
 mode = request.mode or "quick"
-input_text = request.text[:SCENE_TEXT_HARD_CAP] if len(request.text) > SCENE_TEXT_HARD_CAP if len(request.text) > SCENE_TEXT_HARD_CAP:
-logger.info(f"[COST] Text hard-capped: {len(request.text)} -> {SCENE_TEXT_HARD_CAP} chars")
-stages.append({"stage": "input_received", "ok": True, "chars": len(input_text), "mode": mode})
+input_text = request.text[:SCENE_TEXT_HARD_CAP] if len(request.text) > SCENE_TEXT_HARD_CA
+if len(request.text) > SCENE_TEXT_HARD_CAP:
+logger.info(f"[COST] Text hard-capped: {len(request.text)} -> {SCENE_TEXT_HARD_CAP} c
+stages.append({"stage": "input_received", "ok": True, "chars": len(input_text), "mode": m
 logger.info(f"[analyze/text] Input: {len(input_text)} chars, mode={mode}")
 # Check cache first
 cache_key = compute_cache_key(input_text, mode)
@@ -2067,10 +2201,10 @@ await db.breakdowns.insert_one(doc)
 stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
 stages.append({"stage": "db_save", "ok": True})
 stored["_debug"] = {"stages": stages, "fallback": False, "cached": True}
-logger.info("[COST] Served from cache — 0 GPT calls, $0.00")
+logger.info("[COST] Served from cache - 0 GPT calls, $0.00")
 return stored
 # GPT call with timeout (deep gets more time)
-logger.info(f"[COST] Cache miss — GPT call (est. ${estimate_cost(mode):.2f})")
+logger.info(f"[COST] Cache miss - GPT call (est. ${estimate_cost(mode):.2f})")
 gpt_timeout = 120 if mode == "deep" else 90
 try:
 result, raw = await asyncio.wait_for(
@@ -2078,20 +2212,21 @@ analyze_with_gpt(text=input_text, mode=mode),
 timeout=gpt_timeout
 )
 stages.append({"stage": "gpt_analysis", "ok": True})
+90s"})
 # Override GPT memorization with deterministic extraction if character found
 gpt_char = result.get("character_name", "")
 if gpt_char:
 det_mem = extract_character_lines(input_text, gpt_char)
 if det_mem["cue_recall"]:
 result["memorization"] = det_mem
-stages.append({"stage": "deterministic_lines", "ok": True, "lines": len(det_mem["except asyncio.TimeoutError:
-stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after 90s"})
-logger.error("[analyze/text] GPT timed out")
+stages.append({"stage": "deterministic_lines", "ok": True, "lines": len(det_m
+except asyncio.TimeoutError:
+stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after logger.error("[analyze/text] GPT timed out")
 return {
 "id": str(uuid.uuid4()),
 "original_text": input_text,
 "created_at": datetime.now(timezone.utc).isoformat(),
-"scene_summary": "Analysis timed out — text captured below.",
+"scene_summary": "Analysis timed out - text captured below.",
 "character_name": "Unknown",
 "character_objective": "", "stakes": "",
 "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
@@ -2107,7 +2242,7 @@ return {
 "id": str(uuid.uuid4()),
 "original_text": input_text,
 "created_at": datetime.now(timezone.utc).isoformat(),
-"scene_summary": "Analysis failed — your text was saved. See error details.",
+"scene_summary": "Analysis failed - your text was saved. See error details.",
 "character_name": "Unknown",
 "character_objective": "", "stakes": "",
 "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
@@ -2117,7 +2252,7 @@ return {
 }
 # Cache result for future reuse
 await store_cached_breakdown(cache_key, result, mode)
-logger.info(f"[COST] GPT call complete — 1 call, est. ${estimate_cost(mode):.2f}")
+logger.info(f"[COST] GPT call complete - 1 call, est. ${estimate_cost(mode):.2f}")
 # Save to DB
 breakdown_id = str(uuid.uuid4())
 doc = {
@@ -2142,7 +2277,7 @@ raise ValueError("Could not open file as an image")
 # Convert to RGB (handles RGBA, HEIC palettes, etc.)
 if img.mode not in ("RGB", "L"):
 img = img.convert("RGB")
-# Resize if any dimension exceeds 2048px — keeps quality, reduces payload
+# Resize if any dimension exceeds 2048px - keeps quality, reduces payload
 max_dim = 2048
 if max(img.size) > max_dim:
 img.thumbnail((max_dim, max_dim), Image.LANCZOS)
@@ -2196,7 +2331,8 @@ return "pdf"
 if ct.startswith("image/"):
 return "image"
 # Known image extensions
-image_exts = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff", if any(fn.endswith(ext) for ext in image_exts):
+image_exts = {".jpg", ".jpeg", ".png", ".webp", ".heic", ".heif", ".gif", ".bmp", ".tiff"
+if any(fn.endswith(ext) for ext in image_exts):
 return "image"
 # iOS often sends application/octet-stream or empty type for camera photos
 if ct in ("", "application/octet-stream") and raw_bytes:
@@ -2208,7 +2344,8 @@ except Exception:
 pass
 return "unknown"
 @api_router.post("/analyze/image")
-async def analyze_image(file: UploadFile = File(...), context: Optional[str] = Form(None), mode: stages = []
+async def analyze_image(file: UploadFile = File(...), context: Optional[str] = Form(None), mo
+stages = []
 mode = mode or "quick"
 # Stage 1: Read file
 try:
@@ -2217,10 +2354,12 @@ except Exception as e:
 logger.error(f"[analyze/image] File read error: {e}")
 raise HTTPException(status_code=400, detail=f"Failed to read uploaded file: {e}")
 file_size_mb = len(contents) / (1024 * 1024)
-file_info = {"name": file.filename, "content_type": file.content_type, "size_mb": round(file_stages.append({"stage": "file_received", "ok": True, **file_info})
+file_info = {"name": file.filename, "content_type": file.content_type, "size_mb": round(f
+stages.append({"stage": "file_received", "ok": True, **file_info})
 logger.info(f"[analyze/image] File received: {file_info}")
 if len(contents) > 20 * 1024 * 1024:
-raise HTTPException(status_code=400, detail=f"File is {file_size_mb:.1f}MB — must be if len(contents) == 0:
+raise HTTPException(status_code=400, detail=f"File is {file_size_mb:.1f}MB - must be
+if len(contents) == 0:
 raise HTTPException(status_code=400, detail="Uploaded file is empty.")
 context_prefix = ""
 if context and context.strip():
@@ -2230,7 +2369,7 @@ file_type = detect_file_type(file.content_type, file.filename, contents)
 stages.append({"stage": "type_detection", "ok": True, "detected": file_type})
 logger.info(f"[analyze/image] Detected type: {file_type}")
 extracted_text = None
-# Stage 3a: PDF — extract text
+# Stage 3a: PDF - extract text
 if file_type == "pdf":
 try:
 from PyPDF2 import PdfReader
@@ -2241,16 +2380,22 @@ page_text = page.extract_text()
 if page_text:
 extracted_text += page_text + "\n"
 extracted_text = extracted_text.strip()
-stages.append({"stage": "pdf_extract", "ok": True, "chars": len(extracted_text), logger.info(f"[analyze/image] PDF extracted: {len(extracted_text)} chars, {len(pdf_except Exception as e:
+stages.append({"stage": "pdf_extract", "ok": True, "chars": len(extracted_text),
+logger.info(f"[analyze/image] PDF extracted: {len(extracted_text)} chars, {len(pd
+except Exception as e:
 stages.append({"stage": "pdf_extract", "ok": False, "error": str(e)})
 logger.error(f"[analyze/image] PDF extract failed: {e}")
 return _fallback_response(None, stages, f"PDF read failed: {e}")
 if len(extracted_text) < 10:
-stages.append({"stage": "pdf_text_check", "ok": False, "error": "Too little text logger.info("[analyze/image] PDF text too short, rendering pages as images for vision try:
+stages.append({"stage": "pdf_text_check", "ok": False, "error": "Too little text
+logger.info("[analyze/image] PDF text too short, rendering pages as images try:
+for vi
 page_images = pdf_pages_to_images(contents, max_pages=5, dpi=200)
-stages.append({"stage": "pdf_to_images", "ok": True, "pages_rendered": len(page_except ValueError as e:
+stages.append({"stage": "pdf_to_images", "ok": True, "pages_rendered": except ValueError as e:
 stages.append({"stage": "pdf_to_images", "ok": False, "error": str(e)})
-return _fallback_response(None, stages, f"Scanned PDF could not be converted # OCR each page via Vision, then concatenate text
+return _fallback_response(None, stages, f"Scanned PDF could not be converted
+len(pa
+# OCR each page via Vision, then concatenate text
 all_page_text = []
 for page_num, page_jpeg in enumerate(page_images):
 b64 = base64.b64encode(page_jpeg).decode('utf-8')
@@ -2260,19 +2405,23 @@ ocr_client4 = AsyncOpenAI(api_key=api_key)
 raw4 = await asyncio.wait_for(ocr_client4.chat.completions.create(
 model="gpt-4o",
 messages=[
-{"role": "system", "content": "Extract ALL text from this image exactly {"role": "user", "content": [
-{"type": "text", "text": "Extract all text from this script page."},
-{"type": "image_url", "image_url": {"url": f"data:image/jpeg;]}
+{"role": "system", "content": "Extract ALL text from this image e
+{"role": "user", "content": [
+{"type": "text", "text": "Extract all text from this script p
+{"type": "image_url", "image_url": {"url": f"data:image/jpeg;
+]}
 ]
 ), timeout=60)
 page_text = raw4.choices[0].message.content
 all_page_text.append(page_text.strip())
-logger.info(f"[analyze/image] Page {page_num+1} OCR: {len(page_text)} chars")
+logger.info(f"[analyze/image] Page {page_num+1} OCR: {len(page_text)} cha
 except Exception as e:
 logger.warning(f"[analyze/image] Page {page_num+1} OCR failed: {e}")
 all_page_text.append(f"[Page {page_num+1}: OCR failed]")
 combined_text = "\n\n".join(all_page_text)
-stages.append({"stage": "ocr_complete", "ok": True, "total_chars": len(combined_text), logger.info(f"[analyze/image] OCR complete: {len(combined_text)} chars from {len(# Now analyze the combined OCR text
+stages.append({"stage": "ocr_complete", "ok": True, "total_chars": len(combined_t
+logger.info(f"[analyze/image] OCR complete: {len(combined_text)} chars from {len(
+# Now analyze the combined OCR text
 full_text = context_prefix + combined_text if context_prefix else combined_text
 gpt_timeout = 120 if mode == "deep" else 90
 try:
@@ -2283,7 +2432,8 @@ timeout=gpt_timeout
 stages.append({"stage": "gpt_analysis", "ok": True})
 except asyncio.TimeoutError:
 stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out"})
-return _fallback_response(combined_text, stages, "GPT timed out analyzing OCR except Exception as e:
+return _fallback_response(combined_text, stages, "GPT timed out analyzing OCR
+except Exception as e:
 stages.append({"stage": "gpt_analysis", "ok": False, "error": str(e)})
 return _fallback_response(combined_text, stages, str(e))
 breakdown_id = str(uuid.uuid4())
@@ -2300,7 +2450,7 @@ stages.append({"stage": "db_save", "ok": True})
 stored["_debug"] = {"stages": stages, "fallback": False}
 return stored
 else:
-# Text extraction worked — send to GPT
+# Text extraction worked - send to GPT
 full_text = context_prefix + extracted_text if context_prefix else extracted_text
 gpt_timeout = 120 if mode == "deep" else 90
 try:
@@ -2310,7 +2460,8 @@ timeout=gpt_timeout
 )
 stages.append({"stage": "gpt_analysis", "ok": True})
 except asyncio.TimeoutError:
-stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out after return _fallback_response(extracted_text, stages, "GPT timed out on PDF text")
+stages.append({"stage": "gpt_analysis", "ok": False, "error": "Timed out afte
+return _fallback_response(extracted_text, stages, "GPT timed out on PDF text"
 except Exception as e:
 stages.append({"stage": "gpt_analysis", "ok": False, "error": str(e)})
 return _fallback_response(extracted_text, stages, str(e))
@@ -2327,11 +2478,12 @@ stored = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
 stages.append({"stage": "db_save", "ok": True})
 stored["_debug"] = {"stages": stages, "fallback": False}
 return stored
-# Stage 3b: Image — convert/compress then GPT Vision
+# Stage 3b: Image - convert/compress then GPT Vision
 if file_type == "image":
 try:
 jpeg_bytes = prepare_image_for_vision(contents, file.filename)
-stages.append({"stage": "image_convert", "ok": True, "jpeg_kb": round(len(jpeg_bytes) logger.info(f"[analyze/image] Image converted: {len(jpeg_bytes)/1024:.0f}KB JPEG")
+stages.append({"stage": "image_convert", "ok": True, "jpeg_kb": round(len(jpeg_by
+logger.info(f"[analyze/image] Image converted: {len(jpeg_bytes)/1024:.0f}KB JPEG"
 except ValueError as e:
 stages.append({"stage": "image_convert", "ok": False, "error": str(e)})
 logger.error(f"[analyze/image] Image conversion failed: {e}")
@@ -2340,11 +2492,12 @@ base64_image = base64.b64encode(jpeg_bytes).decode('utf-8')
 gpt_timeout = 120 if mode == "deep" else 90
 try:
 result, raw = await asyncio.wait_for(
-analyze_with_gpt(image_base64=base64_image, context=context_prefix if context_timeout=gpt_timeout
+analyze_with_gpt(image_base64=base64_image, context=context_prefix if context
+timeout=gpt_timeout
 )
 stages.append({"stage": "gpt_vision", "ok": True})
 except asyncio.TimeoutError:
-stages.append({"stage": "gpt_vision", "ok": False, "error": "Timed out after 90s"})
+stages.append({"stage": "gpt_vision", "ok": False, "error": "Timed out after 90s"
 return _fallback_response(None, stages, "GPT Vision timed out")
 except Exception as e:
 stages.append({"stage": "gpt_vision", "ok": False, "error": str(e)})
@@ -2364,7 +2517,9 @@ stages.append({"stage": "db_save", "ok": True})
 stored["_debug"] = {"stages": stages, "fallback": False}
 return stored
 # Stage 3c: Unknown type
-stages.append({"stage": "type_detection", "ok": False, "error": f"Unrecognized type: {file.return _fallback_response(None, stages, f"Couldn't identify file type (received: {file.content_def _fallback_response(extracted_text: str | None, stages: list, reason: str):
+stages.append({"stage": "type_detection", "ok": False, "error": f"Unrecognized type: {fil
+return _fallback_response(None, stages, f"Couldn't identify file type (received: {file.co
+def _fallback_response(extracted_text: str | None, stages: list, reason: str):
 """Return a partial response instead of a hard failure.
 Always includes debug stages so frontend can show what went wrong."""
 logger.warning(f"[fallback] {reason}")
@@ -2372,12 +2527,13 @@ return {
 "id": str(uuid.uuid4()),
 "original_text": extracted_text or "",
 "created_at": datetime.now(timezone.utc).isoformat(),
-"scene_summary": f"Analysis incomplete — {reason.split('|')[-1].strip() if '|' in reason "character_name": "Unknown",
+"scene_summary": f"Analysis incomplete - {reason.split('|')[-1].strip() if '|' "character_name": "Unknown",
 "character_objective": "", "stakes": "",
 "beats": [], "acting_takes": {"grounded": "", "bold": "", "wildcard": ""},
 "memorization": {"chunked_lines": [], "cue_recall": []},
 "self_tape_tips": {"framing": "", "eyeline": "", "tone_energy": ""},
 "_debug": {"stages": stages, "fallback": True, "reason": reason}
+in rea
 }
 @api_router.post("/regenerate-takes/{breakdown_id}")
 async def regenerate_takes(breakdown_id: str):
@@ -2393,7 +2549,7 @@ raw_regen = await regen_client.chat.completions.create(
 model="gpt-4o",
 messages=[
 {"role": "system", "content": REGENERATE_TAKES_PROMPT},
-{"role": "user", "content": f"Generate 3 new acting takes for:\n\n{scene_excerpt}"}
+{"role": "user", "content": f"Generate 3 new acting takes for:\n\n{scene_excerpt}
 ]
 )
 response = raw_regen.choices[0].message.content
@@ -2409,8 +2565,12 @@ await db.breakdowns.update_one(
 updated = await db.breakdowns.find_one({"id": breakdown_id}, {"_id": 0})
 return updated
 ADJUSTMENT_LABELS = {
-"tighten_pacing": "Tighten the pacing — make it faster, more urgent, cut the fat",
-"emotional_depth": "Add emotional depth — find the deeper undercurrent, let the vulnerability "more_natural": "Make it more natural — less performed, more conversational, like they're "raise_stakes": "Raise the stakes — this moment matters more than the actor thinks. Make "play_opposite": "Play the opposite — flip the obvious read. If the scene reads angry, play }
+"tighten_pacing": "Tighten the pacing - make it faster, more urgent, cut the fat",
+"emotional_depth": "Add emotional depth - find the deeper undercurrent, let the vulnerabi
+"more_natural": "Make it more natural - less performed, more conversational, like they're
+"raise_stakes": "Raise the stakes - this moment matters more than the actor thinks. Make
+"play_opposite": "Play the opposite - flip the obvious read. If the scene reads angry, pl
+}
 ADJUST_TAKES_PROMPT = """Refine these takes with the adjustments below. Stack all adjustments
 PREVIOUS TAKES:
 {previous_takes}
@@ -2437,7 +2597,8 @@ if not api_key:
 raise HTTPException(status_code=500, detail="LLM API key not configured")
 # Build previous takes string
 takes = breakdown.get("acting_takes", {})
-prev_takes = f"Grounded: {takes.get('grounded', 'N/A')}\nBold: {takes.get('bold', 'N/A')}\# Build adjustment descriptions
+prev_takes = f"Grounded: {takes.get('grounded', 'N/A')}\nBold: {takes.get('bold', 'N/A')}
+# Build adjustment descriptions
 adj_lines = []
 for i, adj_id in enumerate(request.adjustments, 1):
 label = ADJUSTMENT_LABELS.get(adj_id, adj_id)
@@ -2447,14 +2608,15 @@ prompt = ADJUST_TAKES_PROMPT.format(
 previous_takes=prev_takes,
 adjustments=adjustments_text,
 )
-logger.info(f"[adjust-takes] Breakdown {breakdown_id}, adjustments: {request.adjustments}")
+logger.info(f"[adjust-takes] Breakdown {breakdown_id}, adjustments: {request.adjustments}
 adjust_client = AsyncOpenAI(api_key=api_key)
 try:
 raw_adjust = await asyncio.wait_for(adjust_client.chat.completions.create(
 model="gpt-4o",
 messages=[
 {"role": "system", "content": prompt},
-{"role": "user", "content": f"Here's the scene:\n\n{breakdown['original_text'][:]
+{"role": "user", "content": f"Here's the scene:\n\n{breakdown['original_text'
+]
 ), timeout=60)
 response = raw_adjust.choices[0].message.content
 result = parse_json_response(response)
@@ -2489,14 +2651,14 @@ return results
 # --- Full Script: Scene Parsing & Batch Analysis ---
 @api_router.post("/parse-scenes")
 async def parse_scenes(request: ParseScenesRequest):
-"""Parse a full script into scenes and identify which ones contain the specified character."""
+"""Parse a full script into scenes and identify which ones contain the specified characte
 if not request.text.strip():
 raise HTTPException(status_code=400, detail="Script text cannot be empty")
 if not request.character_name.strip():
 raise HTTPException(status_code=400, detail="Character name is required")
 character_name = request.character_name.strip()
 script_text = request.text.strip()
-logger.info(f"[parse-scenes] Parsing {len(script_text)} chars for character: {character_name}")
+logger.info(f"[parse-scenes] Parsing {len(script_text)} chars for character: {character_n
 # Step 1: Try regex-based scene splitting
 scenes = parse_scenes_regex(script_text)
 # Step 2: If regex fails, use GPT to split
@@ -2514,7 +2676,8 @@ scene_client.chat.completions.create(
 model="gpt-4o",
 messages=[
 {"role": "system", "content": SCENE_SPLIT_PROMPT},
-{"role": "user", "content": f"Split this script into scenes:\n\n{gpt_]
+{"role": "user", "content": f"Split this script into scenes:\n\n{gpt_
+]
 ),
 timeout=60
 )
@@ -2553,7 +2716,8 @@ enriched.append({
 "line_count": len(lines),
 })
 character_scenes = [s for s in enriched if s["has_character"]]
-logger.info(f"[parse-scenes] Found {len(enriched)} total scenes, {len(character_scenes)} return {
+logger.info(f"[parse-scenes] Found {len(enriched)} total scenes, {len(character_scenes)}
+return {
 "total_scenes": len(enriched),
 "character_scenes_count": len(character_scenes),
 "character_name": character_name,
@@ -2561,7 +2725,7 @@ logger.info(f"[parse-scenes] Found {len(enriched)} total scenes, {len(character_
 }
 @api_router.post("/analyze/batch")
 async def analyze_batch(request: BatchAnalyzeRequest):
-"""Analyze multiple scenes from a full script. Returns all breakdowns linked by script_id."""
+"""Analyze multiple scenes from a full script. Returns all breakdowns linked by script_id
 if not request.scenes:
 raise HTTPException(status_code=400, detail="No scenes provided")
 if len(request.scenes) > 20:
@@ -2569,7 +2733,8 @@ raise HTTPException(status_code=400, detail="Maximum 20 scenes per batch")
 character_name = request.character_name.strip()
 mode = request.mode or "quick"
 script_id = str(uuid.uuid4())
-logger.info(f"[analyze/batch] {len(request.scenes)} scenes, mode={mode}, character={character_breakdowns = []
+logger.info(f"[analyze/batch] {len(request.scenes)} scenes, mode={mode}, character={chara
+breakdowns = []
 for i, scene in enumerate(request.scenes):
 scene_text = scene.get("text", "")
 scene_heading = scene.get("heading", f"Scene {scene.get('scene_number', i + 1)}")
@@ -2577,7 +2742,9 @@ scene_number = scene.get("scene_number", i + 1)
 if not scene_text.strip():
 continue
 # Prepend character context so GPT focuses on the right character
-analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {scene_heading}]\logger.info(f"[analyze/batch] Analyzing scene {scene_number}/{len(request.scenes)}: {try:
+analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {scene_heading}]\
+logger.info(f"[analyze/batch] Analyzing scene {scene_number}/{len(request.scenes)}: {
+try:
 gpt_timeout = 120 if mode == "deep" else 90
 result, raw = await asyncio.wait_for(
 analyze_with_gpt(text=analysis_text, mode=mode),
@@ -2677,22 +2844,31 @@ doc = {
 "created_at": datetime.now(timezone.utc).isoformat(),
 }
 await db.scripts.insert_one(doc)
-logger.info(f"[scripts/create] Created script {script_id} for {request.character_name}, {return {"script_id": script_id}
+logger.info(f"[scripts/create] Created script {script_id} for {request.character_name}, {
+return {"script_id": script_id}
 @api_router.post("/analyze/scene")
 async def analyze_single_scene(request: SingleSceneRequest):
-"""Analyze a single scene and link it to an existing script. Designed to avoid proxy timeouts."""
+"""Analyze a single scene and link it to an existing script. Designed to avoid proxy time
 if not request.text.strip():
 raise HTTPException(status_code=400, detail="Scene text cannot be empty")
 character_name = request.character_name.strip()
 mode = request.mode or "quick"
 # Hard cap scene text
-scene_text = request.text[:SCENE_TEXT_HARD_CAP] if len(request.text) > SCENE_TEXT_HARD_CAP if len(request.text) > SCENE_TEXT_HARD_CAP:
-logger.info(f"[COST] Scene #{request.scene_number} hard-capped: {len(request.text)} -> analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {request.scene_heading}]"
+scene_text = request.text[:SCENE_TEXT_HARD_CAP] if len(request.text) > SCENE_TEXT_HARD_CA
+if len(request.text) > SCENE_TEXT_HARD_CAP:
+logger.info(f"[COST] Scene #{request.scene_number} hard-capped: {len(request.text)} -
+analysis_text = f"[CHARACTER TO ANALYZE: {character_name}]\n[SCENE: {request.scene_headin
 if request.prep_mode:
-prep_labels = {"audition": "Audition prep", "booked": "Booked role / rehearsal", "silent": analysis_text += f"\n[PREP CONTEXT: {prep_labels.get(request.prep_mode, request.prep_if request.project_type:
-type_labels = {"commercial": "Commercial", "tvfilm": "TV / Film", "theatre": "Theatre", analysis_text += f"\n[PROJECT TYPE: {type_labels.get(request.project_type, request.project_if request.project_type == "vertical":
-analysis_text += "\n[GENRE DIRECTION: This is a vertical short-form drama / soap. analysis_text += f"\n\n{scene_text}"
-logger.info(f"[analyze/scene] script={request.script_id}, scene #{request.scene_number}: # Check cache (key includes character name for strict isolation)
+prep_labels = {"audition": "Audition prep", "booked": "Booked role / rehearsal", "sil
+analysis_text += f"\n[PREP CONTEXT: {prep_labels.get(request.prep_mode, request.prep_
+if request.project_type:
+type_labels = {"commercial": "Commercial", "tvfilm": "TV / Film", "theatre": "Theatre
+analysis_text += f"\n[PROJECT TYPE: {type_labels.get(request.project_type, request.pr
+if request.project_type == "vertical":
+analysis_text += "\n[GENRE DIRECTION: This is a vertical short-form drama / soap.
+analysis_text += f"\n\n{scene_text}"
+logger.info(f"[analyze/scene] script={request.script_id}, scene #{request.scene_number}:
+# Check cache (key includes character name for strict isolation)
 cache_key = compute_cache_key(scene_text, mode, character_name)
 cached_result = await get_cached_breakdown(cache_key)
 if cached_result:
@@ -2714,15 +2890,16 @@ await db.scripts.update_one(
 {"id": request.script_id},
 {"$push": {"breakdown_ids": breakdown_id}}
 )
-logger.info(f"[COST] Scene #{request.scene_number} CACHE HIT — 0 GPT calls, $0.00")
+logger.info(f"[COST] Scene #{request.scene_number} CACHE HIT - 0 GPT calls, $0.00")
 return stored
-logger.info(f"[COST] Scene #{request.scene_number} CACHE MISS — GPT call (est. ${estimate_try:
+logger.info(f"[COST] Scene #{request.scene_number} CACHE MISS - GPT call (est. ${estimate
+try:
 gpt_timeout = 120 if mode == "deep" else 90
 result, raw = await asyncio.wait_for(
 analyze_with_gpt(text=analysis_text, mode=mode),
 timeout=gpt_timeout
 )
-# Override GPT memorization with deterministic extraction (exact lines, zero hallucination)
+# Override GPT memorization with deterministic extraction (exact lines, zero hallucin
 det_mem = extract_character_lines(scene_text, character_name)
 if det_mem["cue_recall"]:
 result["memorization"] = det_mem
@@ -2746,21 +2923,27 @@ await db.scripts.update_one(
 {"id": request.script_id},
 {"$push": {"breakdown_ids": breakdown_id}}
 )
-logger.info(f"[COST] Scene #{request.scene_number} done — 1 GPT call, est. ${estimate_return stored
+logger.info(f"[COST] Scene #{request.scene_number} done - 1 GPT call, est. ${estimate
+return stored
 except asyncio.TimeoutError:
 logger.error(f"[analyze/scene] Scene #{request.scene_number} timed out")
-raise HTTPException(status_code=504, detail=f"Scene #{request.scene_number} timed out. except Exception as e:
+raise HTTPException(status_code=504, detail=f"Scene #{request.scene_number} timed out
+except Exception as e:
 err_str = str(e)
 err_lower = err_str.lower()
 logger.error(f"[analyze/scene] Scene #{request.scene_number} failed: {err_str}")
 if "budget" in err_lower and "exceeded" in err_lower:
-raise HTTPException(status_code=402, detail="LLM budget exceeded. Go to Profile > if "rate" in err_lower and "limit" in err_lower:
-raise HTTPException(status_code=429, detail="Rate limited. Wait a moment and retry.")
-if any(kw in err_lower for kw in ["serviceunavailable", "connection refused", "upstream raise HTTPException(status_code=503, detail="LLM service temporarily unavailable. raise HTTPException(status_code=500, detail=f"Analysis failed: {err_str[:200]}")
+raise HTTPException(status_code=402, detail="LLM budget exceeded. Go to Profile >
+if "rate" in err_lower and "limit" in err_lower:
+raise HTTPException(status_code=429, detail="Rate limited. Wait a moment and retr
+if any(kw in err_lower for kw in ["serviceunavailable", "connection refused", "upstre
+raise HTTPException(status_code=503, detail="LLM service temporarily unavailable.
+raise HTTPException(status_code=500, detail=f"Analysis failed: {err_str[:200]}")
 @api_router.post("/check-cache")
 async def check_cache(request: CheckCacheRequest):
 """Check if a breakdown for this input is already cached."""
-cache_key = compute_cache_key(request.text, request.mode or "quick", request.character_name cached = await get_cached_breakdown(cache_key)
+cache_key = compute_cache_key(request.text, request.mode or "quick", request.character_na
+cached = await get_cached_breakdown(cache_key)
 return {
 "cached": cached is not None,
 "cache_key": cache_key[:16],
@@ -2780,7 +2963,7 @@ cached = await get_cached_breakdown(cache_key)
 is_cached = cached is not None
 if is_cached:
 cached_count += 1
-scene_results.append({"scene_number": scene.get("scene_number", 0), "cached": is_cached})
+scene_results.append({"scene_number": scene.get("scene_number", 0), "cached": is_cach
 uncached = len(request.scenes) - cached_count
 return {
 "total": len(request.scenes),
@@ -2791,7 +2974,7 @@ return {
 }
 @api_router.post("/parse-lines")
 async def parse_lines(request: ParseLinesRequest):
-"""Deterministic line extraction — zero GPT, zero credits."""
+"""Deterministic line extraction - zero GPT, zero credits."""
 result = extract_character_lines(request.text, request.character_name)
 return {
 "character_name": request.character_name,
@@ -2808,7 +2991,7 @@ breakdown_id: str
 cleaned_text: str
 @api_router.post("/clean-text")
 async def clean_text_endpoint(request: CleanTextRequest):
-"""Deterministic script cleaning — zero GPT, zero credits.
+"""Deterministic script cleaning - zero GPT, zero credits.
 Returns cleaned text for user review/edit."""
 cleaned = clean_script_text(request.text)
 return {"cleaned_text": cleaned}
@@ -2822,7 +3005,8 @@ raise HTTPException(status_code=404, detail="Script not found")
 breakdown_ids = script.get("breakdown_ids", [])
 scenes = []
 for bid in breakdown_ids:
-b = await db.breakdowns.find_one({"id": bid}, {"_id": 0, "id": 1, "original_text": 1, if b:
+b = await db.breakdowns.find_one({"id": bid}, {"_id": 0, "id": 1, "original_text": 1,
+if b:
 raw = b.get("original_text", "")
 already_cleaned = b.get("cleaned_text", "")
 scenes.append({
@@ -2873,7 +3057,8 @@ await db.breakdowns.update_one(
 {"$set": {"cleaned_text": ct}},
 )
 saved += 1
-logger.info(f"[CLEAN] Saved cleaned_text for {saved}/{len(scenes)} scenes of script {script_return {"status": "ok", "saved": saved, "total": len(scenes)}
+logger.info(f"[CLEAN] Saved cleaned_text for {saved}/{len(scenes)} scenes of script {scri
+return {"status": "ok", "saved": saved, "total": len(scenes)}
 @api_router.post("/debug/parse-audit")
 async def parse_audit(request: ParseLinesRequest):
 """Audit tool: shows raw text annotated with what the parser captured vs missed.
@@ -2901,7 +3086,8 @@ m = _re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s)
 if not m:
 return False
 name = m.group(1).strip()
-if _re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED|return False
+if _re.match(r'^(INT\.|EXT\.|INT/EXT\.|FADE|CUT TO|EPISODE|EP[\.\s]|CHAPTER|CONTINUED
+return False
 return True
 def _extract_name(s):
 m = _re.match(r'^([A-Z][A-Z\s\.\'\-]+?)(?:\s*\(.*?\))?\s*$', s.strip())
@@ -2949,12 +3135,22 @@ return {
 "extracted_line_count": len(extracted_lines),
 "extracted_lines": extracted_lines,
 "uncaptured_count": len(uncaptured),
-"uncaptured_lines": [{"line_num": u["line_num"], "text": u["raw"].strip()} for u in uncaptured],
-"annotations": annotations,
+"uncaptured_lines": [{"line_num": u["line_num"], "text": u["raw"].strip()} for "annotations": annotations,
+u in u
 }
-# Curated default voices — available with any ElevenLabs API key
+# Curated default voices - available with any ElevenLabs API key
 DEFAULT_VOICES = [
-{"voice_id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel", "gender": "female", "accent": "American", {"voice_id": "pNInz6obpgDQGcFmaJgB", "name": "Adam", "gender": "male", "accent": "American", {"voice_id": "EXAVITQu4vr4xnSDxMaL", "name": "Sarah", "gender": "female", "accent": "American", {"voice_id": "cjVigY5qzO86Huf0OWal", "name": "Daniel", "gender": "male", "accent": "British", {"voice_id": "IKne3meq5aSn9XLyUdCD", "name": "Charlie", "gender": "male", "accent": "Australian", {"voice_id": "XB0fDUnXU5powFXDhCwa", "name": "Charlotte", "gender": "female", "accent": "{"voice_id": "JBFqnCBsd6RMkjVDRZzb", "name": "George", "gender": "male", "accent": "British", {"voice_id": "ThT5KcBeYPX3keUQqHPh", "name": "Dorothy", "gender": "female", "accent": "British", {"voice_id": "yoZ06aMxZJJ28mfd3POQ", "name": "Sam", "gender": "male", "accent": "American", {"voice_id": "GBv7mTt0atIp3Br8iCZE", "name": "Thomas", "gender": "male", "accent": "American", ]
+{"voice_id": "21m00Tcm4TlvDq8ikWAM", "name": "Rachel", "gender": "female", "accent": "Ame
+{"voice_id": "pNInz6obpgDQGcFmaJgB", "name": "Adam", "gender": "male", "accent": "America
+{"voice_id": "EXAVITQu4vr4xnSDxMaL", "name": "Sarah", "gender": "female", "accent": "Amer
+{"voice_id": "cjVigY5qzO86Huf0OWal", "name": "Daniel", "gender": "male", "accent": "Briti
+{"voice_id": "IKne3meq5aSn9XLyUdCD", "name": "Charlie", "gender": "male", "accent": "Aust
+{"voice_id": "XB0fDUnXU5powFXDhCwa", "name": "Charlotte", "gender": "female", "accent": "
+{"voice_id": "JBFqnCBsd6RMkjVDRZzb", "name": "George", "gender": "male", "accent": "Briti
+{"voice_id": "ThT5KcBeYPX3keUQqHPh", "name": "Dorothy", "gender": "female", "accent": "Br
+{"voice_id": "yoZ06aMxZJJ28mfd3POQ", "name": "Sam", "gender": "male", "accent": "American
+{"voice_id": "GBv7mTt0atIp3Br8iCZE", "name": "Thomas", "gender": "male", "accent": "Ameri
+]
 @api_router.get("/tts/status")
 async def tts_status():
 return {"available": eleven_client is not None}
@@ -2966,7 +3162,8 @@ return {"voices": DEFAULT_VOICES, "available": True}
 @api_router.post("/tts/generate")
 async def tts_generate(request: TTSRequest):
 if not eleven_client:
-raise HTTPException(status_code=503, detail="Voice features require an ElevenLabs API if not request.text.strip():
+raise HTTPException(status_code=503, detail="Voice features require an ElevenLabs API
+if not request.text.strip():
 raise HTTPException(status_code=400, detail="Text cannot be empty")
 try:
 from elevenlabs import VoiceSettings as VS
@@ -2976,7 +3173,8 @@ audio_gen = eleven_client.text_to_speech.convert(
 text=request.text,
 voice_id=voice_id,
 model_id="eleven_multilingual_v2",
-voice_settings=VS(stability=0.55, similarity_boost=0.7, style=0.15, use_speaker_)
+voice_settings=VS(stability=0.55, similarity_boost=0.7, style=0.15, use_speak
+)
 data = b""
 for chunk in audio_gen:
 data += chunk
@@ -3062,7 +3260,7 @@ if desc:
 pdf.set_x(pdf.l_margin + 4)
 pdf.set_font('Helvetica', '', 9)
 pdf.multi_cell(w - 4, 5, safe(desc))
-# Subtext — the key part
+# Subtext - the key part
 subtext = beat.get('subtext', '')
 if subtext:
 pdf.set_x(pdf.l_margin + 4)
@@ -3089,7 +3287,8 @@ pdf.ln(4)
 pdf.set_font('Helvetica', '', 7)
 pdf.set_text_color(150, 150, 150)
 pdf.set_x(pdf.l_margin)
-pdf.cell(w, 4, safe(f"Generated by Actor's Companion | {breakdown.get('created_at', '')[:pdf.set_x(pdf.l_margin)
+pdf.cell(w, 4, safe(f"Generated by Actor's Companion | {breakdown.get('created_at', '')
+pdf.set_x(pdf.l_margin)
 pdf.cell(w, 4, safe("Co-produced by DangerLou Media"), 0, 1, 'C')
 pdf_bytes = pdf.output()
 filename = safe(char_name).replace(' ', '_').lower()
