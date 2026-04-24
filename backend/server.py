@@ -16,7 +16,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from datetime import datetime, timezone
-from emergentintegrations.llm.chat import LlmChat, UserMessage, ImageContent
+from openai import AsyncOpenA
 from PIL import Image
 
 ROOT_DIR = Path(__file__).parent
