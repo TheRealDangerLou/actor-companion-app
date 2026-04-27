@@ -91,7 +91,7 @@ export default function ProjectHome({ onOpenProject, onCreateProject }) {
             Your Projects
           </p>
           <AnimatePresence>
-            {projects.map((project) => (
+            {(Array.isArray(projects) ? projects : []).map((project) => (
               <motion.div
                 key={project.id}
                 layout
